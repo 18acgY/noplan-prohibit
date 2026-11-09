@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}详情 · 次日交易许可单{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ permit.name or "未命名" }} <span class="code">{{ permit.code or "" }}</span></h1>
+  <div class="head-actions">
+    <a class="btn ghost" href="/permits/{{ permit.id }}/edit">编辑</a>
+    <form method="post" action="/permits/{{ permit.id }}/delete" onsubmit="return confirm('确定删除这张许可单？');">
+      <button class="btn danger" type="submit">删除</button>
+    </form>
+  </div>
+</div>
+
+<div class="result-banner {{ meta[r.status].cls }}">
+  <div class="result-label">{{ meta[r.status].label }}</div>
+  <div class="result-msg">{{ r.message }}</div>
+  {% if r.reasons %}
+  <ul class="result-reasons">
+    {% for reason in r.reasons %}<li>{{ reason }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+
+<details open class="section">
+  <summary>基本信息</summary>
+  <dl class="kv">
+    <div><dt>填单日期</dt><dd>{{ permit.fill_date or "—" }}</dd></div>
+    <div><dt>计划交易日</dt><dd>{{ permit.plan_date or "—" }}</dd></div>
+    <div><dt>计划动作</dt><dd>{{ permit.action or "—" }}</dd></div>
+    <div><dt>市场 / 板块</dt><dd>{{ permit.market or "—" }}</dd></div>
+    <div><dt>证券代码</dt><dd>{{ permit.code or "—" }}</dd></div>
+    <div><dt>证券名称</dt><dd>{{ permit.name or "—" }}</dd></div>
+  </dl>
+  <p class="hint">日期校验：demo 未启用（正式版校验“前一交易日填写”）。</p>
+</details>
+
+<details open class="section">
+  <summary>交易逻辑</summary>
+  <dl class="kv one">
+    <div><dt>核心逻辑</dt><dd>{{ permit.core_logic or "—" }}</dd></div>
+    <div><dt>客观证据与数据</dt><dd>{{ permit.evidence or "—" }}</dd></div>
+    <div><dt>反方观点</dt><dd>{{ permit.counter_argument or "—" }}</dd></div>
+  </dl>
+</details>
+
+<details open class="section">
+  <summary>市场环境评分</summary>
+  <div class="score-grid">
+    <div><span>大盘</span><strong>{{ "%g"|format(permit.score_market or 0) }}</strong></div>
+    <div><span>板块</span><strong>{{ "%g"|format(permit.score_sector or 0) }}</strong></div>
+    <div><span>个股</span><strong>{{ "%g"|format(permit.score_stock or 0) }}</strong></div>
+    <div><span>组合相关性</span><strong>{{ "%g"|format(permit.score_corr or 0) }}</strong></div>
+    <div class="score-total"><span>总分</span><strong>{{ "%g"|format(r.derived.total_score) }}</strong></div>
+  </div>
+</details>
+
+<details open class="section">
+  <summary>交易参数与执行计划</summary>
+  <dl class="kv">
+    <div><dt>买入价格</dt><dd>{{ permit.buy_price|money }}</dd></div>
+    <div><dt>启动低点 / 止损点</dt><dd>{{ permit.stop_price|money }}</dd></div>
+    <div><dt>主压力位 / 目标价</dt><dd>{{ permit.target_price|money }}</dd></div>
+    <div><dt>计划数量</dt><dd>{{ permit.qty|money }}</dd></div>
+    <div><dt>预计交易金额</dt><dd>{{ r.derived.trade_amount|money }}</dd></div>
+    <div><dt>止损距离</dt><dd>{{ r.derived.stop_distance|pct }}</dd></div>
+    <div><dt>上涨空间</dt><dd>{{ r.derived.upside|pct }}</dd></div>
+    <div><dt>盈亏比</dt><dd>{{ "%.2f"|format(r.derived.reward_risk) if r.derived.reward_risk is not none else "—" }}</dd></div>
+    <div><dt>账户总资产</dt><dd>{{ permit.account_total|money }}</dd></div>
+    <div><dt>单笔风险上限</dt><dd>{{ permit.risk_cap|money }}</dd></div>
+    <div><dt>计划风险额</dt><dd>{{ r.derived.planned_risk|money }}</dd></div>
+    <div><dt>预算检查</dt><dd>{% if r.derived.budget_ok is none %}—{% elif r.derived.budget_ok %}预算内{% else %}超预算{% endif %}</dd></div>
+  </dl>
+  <p class="hint">门槛：上涨空间 ≥ {{ thresholds.upside_min|pct }}、盈亏比 &gt; {{ "%g"|format(thresholds.reward_risk_min) }}、评分 ≥ {{ "%g"|format(thresholds.score_min) }}。</p>
+</details>
+
+<details open class="section">
+  <summary>触发、取消与退出</summary>
+  <dl class="kv one">
+    <div><dt>触发条件</dt><dd>{{ permit.trigger_cond or "—" }}</dd></div>
+    <div><dt>取消条件</dt><dd>{{ permit.cancel or "—" }}</dd></div>
+    <div><dt>预设退出条件</dt><dd>{{ permit.exit_plan or "—" }}</dd></div>
+  </dl>
+</details>
+
+<details open class="section">
+  <summary>情绪与纪律检查</summary>
+  <div class="emo-grid">
+    {% for i, label in [
+      (1, "踏空/眼红/恐惧/想回本"),
+      (2, "只凭资金流/传闻/他人推荐"),
+      (3, "临时起意、思考不足"),
+      (4, "没有退出规则"),
+      (5, "准备盘中追价/改计划"),
+      (6, "超出资金/仓位/风险预算"),
+      (7, "未核实重要公告/环境"),
+      (8, "买入理由经不起反方检验")
+    ] %}
+    <div class="emo-item {% if permit['emo_' ~ i] == '是' %}red{% endif %}">
+      <span>{{ loop.index }}. {{ label }}</span>
+      <strong>{{ permit['emo_' ~ i] or "—" }}</strong>
+    </div>
+    {% endfor %}
+  </div>
+  <dl class="kv one">
+    <div><dt>承认错误的客观信号</dt><dd>{{ permit.admit_signal or "—" }}</dd></div>
+  </dl>
+</details>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}次日交易许可单{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  {% if request.session.get("auth") %}
+  <header class="topbar">
+    <a class="brand" href="/permits">次日交易许可单</a>
+    <nav>
+      <a href="/permits">许可单</a>
+      <a href="/settings">参数</a>
+      <a href="/discipline">纪律</a>
+      <a href="/logout">退出</a>
+    </nav>
+  </header>
+  {% endif %}
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/form.js"></script>
+</body>
+</html>

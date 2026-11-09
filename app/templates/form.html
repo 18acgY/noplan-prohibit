@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}{{ "新建许可单" if mode == "new" else "编辑许可单" }} · 次日交易许可单{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ "新建许可单" if mode == "new" else "编辑许可单" }}</h1>
+  <a class="btn ghost" href="/permits">返回列表</a>
+</div>
+
+<form method="post" action="{{ post_url }}" class="permit-form" id="permit-form">
+  <details open class="section">
+    <summary>一、基本信息</summary>
+    <div class="grid2">
+      <div class="field">
+        <label for="fill_date">填单日期</label>
+        <input id="fill_date" name="fill_date" type="date" value="{{ permit.fill_date or '' }}">
+      </div>
+      <div class="field">
+        <label for="plan_date">计划交易日</label>
+        <input id="plan_date" name="plan_date" type="date" value="{{ permit.plan_date or '' }}">
+      </div>
+      <div class="field">
+        <label for="action">计划动作</label>
+        <select id="action" name="action">
+          {% for a in ["开仓", "加仓", "减仓", "清仓", "止损退出"] %}
+          <option value="{{ a }}" {% if permit.action == a %}selected{% endif %}>{{ a }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="market">市场 / 板块</label>
+        <select id="market" name="market">
+          <option value="">请选择</option>
+          {% for m in ["沪市主板", "深市主板", "创业板", "科创板", "ETF", "其他"] %}
+          <option value="{{ m }}" {% if permit.market == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="code">证券代码</label>
+        <input id="code" name="code" type="text" inputmode="numeric" value="{{ permit.code or '' }}" placeholder="例如 588000">
+      </div>
+      <div class="field">
+        <label for="name">证券名称</label>
+        <input id="name" name="name" type="text" value="{{ permit.name or '' }}" placeholder="例如 科创ETF">
+      </div>
+    </div>
+    <p class="hint">日期校验：demo 未启用。正式版会校验「填单日期 = 计划交易日的上一交易日」。</p>
+  </details>
+
+  <details open class="section">
+    <summary>二、交易逻辑：先解释为什么做</summary>
+    <div class="field">
+      <label for="core_logic">核心逻辑（一句话说明）</label>
+      <textarea id="core_logic" name="core_logic" rows="2" placeholder="为什么现在买/卖这笔？">{{ permit.core_logic or '' }}</textarea>
+    </div>
+    <div class="field">
+      <label for="evidence">客观证据与数据（至少写出可验证依据）</label>
+      <textarea id="evidence" name="evidence" rows="3" placeholder="成交量、均线、公告、板块数据……">{{ permit.evidence or '' }}</textarea>
+    </div>
+    <div class="field">
+      <label for="counter_argument">反方观点（什么情况说明你可能看错？）</label>
+      <textarea id="counter_argument" name="counter_argument" rows="3">{{ permit.counter_argument or '' }}</textarea>
+    </div>
+  </details>
+
+  <details open class="section">
+    <summary>三、市场环境评分（100 分框架）</summary>
+    <div class="grid4">
+      <div class="field">
+        <label for="score_market">大盘（0–30）</label>
+        <input id="score_market" name="score_market" type="number" min="0" max="30" step="1" value="{{ permit.score_market if permit.score_market is not none else '' }}">
+      </div>
+      <div class="field">
+        <label for="score_sector">板块（0–30）</label>
+        <input id="score_sector" name="score_sector" type="number" min="0" max="30" step="1" value="{{ permit.score_sector if permit.score_sector is not none else '' }}">
+      </div>
+      <div class="field">
+        <label for="score_stock">个股（0–30）</label>
+        <input id="score_stock" name="score_stock" type="number" min="0" max="30" step="1" value="{{ permit.score_stock if permit.score_stock is not none else '' }}">
+      </div>
+      <div class="field">
+        <label for="score_corr">组合相关性（0–10）</label>
+        <input id="score_corr" name="score_corr" type="number" min="0" max="10" step="1" value="{{ permit.score_corr if permit.score_corr is not none else '' }}">
+      </div>
+    </div>
+    <div class="calc-line">总分：<strong id="calc-total">—</strong>　（低于 60 分只允许轻仓）</div>
+  </details>
+
+  <details open class="section">
+    <summary>四、交易参数与执行计划</summary>
+    <div class="grid2">
+      <div class="field">
+        <label for="buy_price">买入价格（元）</label>
+        <input id="buy_price" name="buy_price" type="number" step="0.001" min="0" value="{{ permit.buy_price if permit.buy_price is not none else '' }}">
+      </div>
+      <div class="field">
+        <label for="stop_price">启动低点 / 止损点（元）</label>
+        <input id="stop_price" name="stop_price" type="number" step="0.001" min="0" value="{{ permit.stop_price if permit.stop_price is not none else '' }}">
+      </div>
+      <div class="field">
+        <label for="target_price">主压力位 / 目标价（元）</label>
+        <input id="target_price" name="target_price" type="number" step="0.001" min="0" value="{{ permit.target_price if permit.target_price is not none else '' }}">
+      </div>
+      <div class="field">
+        <label for="qty">计划数量（股 / 份）</label>
+        <input id="qty" name="qty" type="number" step="1" min="0" value="{{ permit.qty if permit.qty is not none else '' }}">
+      </div>
+      <div class="field">
+        <label for="account_total">账户总资产（元）</label>
+        <input id="account_total" name="account_total" type="number" step="0.01" min="0" value="{{ permit.account_total if permit.account_total is not none else '' }}">
+      </div>
+      <div class="field">
+        <label for="risk_cap">单笔风险上限（元）</label>
+        <input id="risk_cap" name="risk_cap" type="number" step="0.01" min="0" value="{{ permit.risk_cap if permit.risk_cap is not none else '' }}">
+      </div>
+    </div>
+    <div class="calc-panel">
+      <div><span>预计交易金额</span><strong id="calc-amount">—</strong></div>
+      <div><span>止损距离</span><strong id="calc-stopdist">—</strong></div>
+      <div><span>上涨空间</span><strong id="calc-upside">—</strong></div>
+      <div><span>盈亏比</span><strong id="calc-rr">—</strong></div>
+      <div><span>计划风险额</span><strong id="calc-risk">—</strong></div>
+      <div><span>预算检查</span><strong id="calc-budget">—</strong></div>
+    </div>
+    <p class="hint">买入/加仓：上涨空间至少 15%、盈亏比必须大于 2、计划风险额不得超过单笔风险上限。减仓/清仓：写明数量、触发条件与退出依据。</p>
+  </details>
+
+  <details open class="section">
+    <summary>五、触发、取消与退出</summary>
+    <div class="field">
+      <label for="trigger_cond">触发条件（什么情况出现才允许下单？）</label>
+      <textarea id="trigger_cond" name="trigger_cond" rows="3">{{ permit.trigger_cond or '' }}</textarea>
+    </div>
+    <div class="field">
+      <label for="cancel">取消条件（什么情况出现就放弃这笔计划？）</label>
+      <textarea id="cancel" name="cancel" rows="2">{{ permit.cancel or '' }}</textarea>
+    </div>
+    <div class="field">
+      <label for="exit_plan">预设退出条件（怎样证明逻辑失效 / 何时止盈止损？）</label>
+      <textarea id="exit_plan" name="exit_plan" rows="3">{{ permit.exit_plan or '' }}</textarea>
+    </div>
+  </details>
+
+  <details open class="section">
+    <summary>六、情绪与纪律检查（任一项“是”即禁止交易）</summary>
+    <div class="grid2">
+      {% for i, label in [
+        (1, "是否因踏空 / 眼红 / 恐惧 / 想回本？"),
+        (2, "是否只凭资金流 / 传闻 / 他人推荐？"),
+        (3, "是否临时起意、思考不足？"),
+        (4, "是否没有退出规则？"),
+        (5, "是否准备盘中追价 / 改计划？"),
+        (6, "是否超出资金 / 仓位 / 风险预算？"),
+        (7, "是否未核实重要公告 / 环境？"),
+        (8, "买入理由是否经不起反方检验？")
+      ] %}
+      <div class="field">
+        <label for="emo_{{ i }}">{{ label }}</label>
+        <select id="emo_{{ i }}" name="emo_{{ i }}">
+          <option value="否" {% if permit["emo_" ~ i] != "是" %}selected{% endif %}>否</option>
+          <option value="是" {% if permit["emo_" ~ i] == "是" %}selected{% endif %}>是</option>
+        </select>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="field">
+      <label for="admit_signal">如果判断错误，我会依据什么客观信号承认错误？</label>
+      <textarea id="admit_signal" name="admit_signal" rows="2">{{ permit.admit_signal or '' }}</textarea>
+    </div>
+  </details>
+
+  <div class="form-actions">
+    <button class="btn primary" type="submit">保存许可单</button>
+    <a class="btn ghost" href="/permits">取消</a>
+  </div>
+</form>
+{% endblock %}

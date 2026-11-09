@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}许可单列表 · 次日交易许可单{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>许可单</h1>
+  <a class="btn primary" href="/permits/new">+ 新建许可单</a>
+</div>
+{% if items %}
+<div class="cards">
+  {% for item in items %}
+  <a class="card permit-card" href="/permits/{{ item.id }}">
+    <div class="permit-top">
+      <span class="date">{{ item.plan_date or "—" }}</span>
+      <span class="badge {{ meta[item.review.status].cls }}">{{ meta[item.review.status].label }}</span>
+    </div>
+    <div class="permit-main">
+      <strong>{{ item.name or "未命名" }}</strong>
+      <span class="code">{{ item.code or "—" }}</span>
+      <span class="tag">{{ item.action or "—" }}</span>
+    </div>
+    <div class="permit-sub">
+      <span>总分 {{ "%g"|format(item.review.derived.total_score) }}</span>
+      {% if item.review.derived.upside is not none %}
+      <span>上涨空间 {{ item.review.derived.upside|pct }}</span>
+      {% endif %}
+      {% if item.review.derived.reward_risk is not none %}
+      <span>盈亏比 {{ "%.2f"|format(item.review.derived.reward_risk) }}</span>
+      {% endif %}
+    </div>
+    <p class="permit-msg">{{ item.review.message }}</p>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <p>还没有任何许可单。</p>
+  <p class="muted">先写一张明天的计划，再决定要不要交易。</p>
+  <a class="btn primary" href="/permits/new">新建第一张</a>
+</div>
+{% endif %}
+{% endblock %}

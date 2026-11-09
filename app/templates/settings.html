@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}我的交易参数 · 次日交易许可单{% endblock %}
+{% block content %}
+<div class="page-head"><h1>我的交易参数</h1></div>
+
+<form method="post" action="/settings" class="permit-form narrow">
+  <div class="field">
+    <label for="upside_min">上涨空间门槛（%）</label>
+    <input id="upside_min" name="upside_min" type="number" step="0.1" min="0" value="{{ '%g'|format(settings.upside_min * 100) }}">
+    <p class="hint">低于该值：买入/加仓禁止交易。原表默认 15%。</p>
+  </div>
+  <div class="field">
+    <label for="reward_risk_min">盈亏比门槛</label>
+    <input id="reward_risk_min" name="reward_risk_min" type="number" step="0.1" min="0" value="{{ '%g'|format(settings.reward_risk_min) }}">
+    <p class="hint">必须严格大于该值（等于也不通过）。原表默认 2。</p>
+  </div>
+  <div class="field">
+    <label for="score_min">市场评分门槛</label>
+    <input id="score_min" name="score_min" type="number" step="1" min="0" max="100" value="{{ '%g'|format(settings.score_min) }}">
+    <p class="hint">低于该值：预审通过但禁止重仓。原表默认 60。</p>
+  </div>
+  <div class="form-actions">
+    <button class="btn primary" type="submit">保存参数</button>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,15 @@
+services:
+  noplan:
+    build: .
+    container_name: noplan
+    restart: unless-stopped
+    ports:
+      # 只绑本机回环，公网流量必须经过宿主机 nginx
+      - "127.0.0.1:8080:8000"
+    environment:
+      NOPLAN_PASSWORD: ${NOPLAN_PASSWORD:?请在 .env 里设置 NOPLAN_PASSWORD}
+      NOPLAN_SECRET: ${NOPLAN_SECRET:?请在 .env 里设置 NOPLAN_SECRET}
+      NOPLAN_DB: /data/noplan.db
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data:/data
