@@ -3,11 +3,24 @@
 > 目标：在服务器上**不依赖 DSH** 跑通一次分析，拿到真实耗时和峰值内存，用来定超时。
 > 本目录的 `relay_launcher.py` 是跨平台版：路径走 `TA_REPO` / `TA_DATA`，`winreg` 只在 Windows 生效。
 
+## 目录约定（多工程并存）
+
+```
+/home/workspace/
+├── noplan-prohibit/          # 网站
+└── tradingagents/            # 分析引擎工程
+    ├── TradingAgents/        # 代码 + .venv + .env
+    ├── .runtime/             # logs / cache / memory / yf-cache
+    ├── relay_launcher.py
+    └── smoke.sh
+```
+
 ## 0. 解压
 
 ```bash
-cd /home/workspace
-tar -xzf tradingagents-freeze-20261110.tar.gz --strip-components=1
+mkdir -p /home/workspace/tradingagents
+cd /home/workspace/tradingagents
+tar -xzf /home/workspace/tradingagents-freeze-20261110.tar.gz --strip-components=1
 ls
 # 期望看到：TradingAgents/  relay_launcher.py  smoke.sh  .env.linux.example
 ```
@@ -50,7 +63,7 @@ sudo sysctl --system
 sudo apt-get update
 sudo apt-get install -y python3.12-venv time
 
-cd /home/workspace/TradingAgents
+cd /home/workspace/tradingagents/TradingAgents
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -U pip setuptools wheel
@@ -62,18 +75,18 @@ pip install akshare==1.20.21 --index-url https://pypi.tuna.tsinghua.edu.cn/simpl
 ## 3. 配置 .env
 
 ```bash
-cd /home/workspace/TradingAgents
-cp /home/workspace/.env.linux.example .env
+cd /home/workspace/tradingagents/TradingAgents
+cp /home/workspace/tradingagents/.env.linux.example .env
 nano .env          # 填 OPENAI_COMPATIBLE_API_KEY（从本机 .env 复制）
 chmod 600 .env
 ```
 
-`TRADINGAGENTS_RESULTS_DIR=/home/workspace/.runtime/logs`，报告会落在它下面的 `reports/`。
+`TRADINGAGENTS_RESULTS_DIR=/home/workspace/tradingagents/.runtime/logs`，报告会落在它下面的 `reports/`。
 
 ## 4. 冒烟（会真花一次 LLM 费用）
 
 ```bash
-cd /home/workspace
+cd /home/workspace/tradingagents
 chmod +x smoke.sh
 bash smoke.sh 2026-11-10
 ```
@@ -83,9 +96,9 @@ bash smoke.sh 2026-11-10
 ## 5. 回贴这些给我
 
 ```bash
-tail -n 40 /home/workspace/.runtime/smoke-*.log
-ls /home/workspace/.runtime/logs/reports/
-sed -n '1,6p' /home/workspace/.runtime/logs/reports/*/5_portfolio/decision.md
+tail -n 40 /home/workspace/tradingagents/.runtime/smoke-*.log
+ls /home/workspace/tradingagents/.runtime/logs/reports/
+sed -n '1,6p' /home/workspace/tradingagents/.runtime/logs/reports/*/5_portfolio/decision.md
 free -h
 df -h /
 ```
@@ -96,6 +109,7 @@ df -h /
 
 | 现象 | 处理 |
 |---|---|
+| `cd: /home/workspace/TradingAgents: No such file` | 解压目录与脚本默认位置不一致：`export TA_BASE=/home/workspace/tradingagents`，或按第 0 节重新解压 |
 | `No module named akshare` | 回第 2 步显式安装 |
 | `No module named tradingagents` | 在仓库根目录执行，且先 `pip install -e .` |
 | `400 Non-streaming requests are not allowed` | 没用 `relay_launcher.py` 启动 |

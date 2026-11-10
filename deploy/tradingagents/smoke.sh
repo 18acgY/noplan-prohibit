@@ -3,7 +3,8 @@
 # 用法：bash smoke.sh [YYYY-MM-DD]
 set -euo pipefail
 
-BASE="${TA_BASE:-/home/workspace}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE="${TA_BASE:-$SCRIPT_DIR}"
 export TA_REPO="${TA_REPO:-$BASE/TradingAgents}"
 export TA_DATA="${TA_DATA:-$BASE/.runtime}"
 export PYTHONUTF8=1
