@@ -12,16 +12,37 @@ ls
 # 期望看到：TradingAgents/  relay_launcher.py  smoke.sh  .env.linux.example
 ```
 
-## 1. 看资源，补 swap（2C2G 必做）
+## 1. 看资源，配 zram（2C2G 推荐，替代大盘 swap）
 
 ```bash
 free -h; nproc; df -h /
-# 没有 swap 时：
-sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
-sudo mkswap /swapfile && sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-free -h
 ```
+
+zram 用 CPU 压缩内存当 swap，不写磁盘，避免云盘 IO 被换页打满、拖死 SSH 登录：
+
+```bash
+sudo apt-get install -y zram-tools
+sudo tee /etc/default/zramswap >/dev/null <<'EOF'
+ALGO=zstd
+PERCENT=75
+PRIORITY=100
+EOF
+sudo systemctl restart zramswap
+zramctl; swapon --show; free -h
+```
+
+再留 1 GB 磁盘 swap 兜底（优先级 10，zram 满了才会用）：
+
+```bash
+sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon -p 10 /swapfile
+echo '/swapfile none swap sw,pri=10 0 0' | sudo tee -a /etc/fstab
+
+printf 'vm.swappiness=100\nvm.page-cluster=0\n' | sudo tee /etc/sysctl.d/99-zram.conf
+sudo sysctl --system
+```
+
+冒烟时另开窗口看有没有 thrash：`vmstat 1 5`（`si`/`so` 持续很高就是换页严重）、`zramctl`（看压缩后实际占用）。
 
 ## 2. Python 3.12 venv + 依赖
 
