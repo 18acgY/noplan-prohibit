@@ -7,7 +7,7 @@
 
 ```bash
 cd /home/workspace
-tar -xzf tradingagents-freeze-20261110.tar.gz
+tar -xzf tradingagents-freeze-20261110.tar.gz --strip-components=1
 ls
 # 期望看到：TradingAgents/  relay_launcher.py  smoke.sh  .env.linux.example
 ```
