@@ -1,0 +1,21 @@
+[Unit]
+Description=TradingAgents analysis worker for noplan-prohibit
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/workspace/tradingagents
+EnvironmentFile=/etc/noplan-worker.env
+ExecStart=/usr/bin/python3 /home/workspace/noplan-prohibit/worker/analysis_worker.py
+Restart=always
+RestartSec=10
+# 实测峰值约 250MB，留 3 倍余量；不需要 swap
+MemoryMax=800M
+# 日志走 journald
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

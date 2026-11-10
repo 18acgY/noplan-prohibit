@@ -33,10 +33,36 @@
 
 应用已改为只监听 `127.0.0.1:8080`，公网只开 nginx 的 80 端口。
 
-## TradingAgents 分析集成（开发中）
+## TradingAgents 分析集成
 
-许可单可以一键触发 TradingAgents 分析，摘要回写详情页。迁移与冒烟步骤见
-[deploy/tradingagents/README-m0.md](deploy/tradingagents/README-m0.md)。
+许可单详情页有「运行分析」按钮：按证券代码触发 TradingAgents，摘要回写详情页，可点开完整报告。
+
+要点：
+
+- 同 `ticker + 分析日` 已有成功结果时直接复用，不重复花钱
+- 每日成功分析上限默认 10 次（`NOPLAN_DAILY_ANALYSIS_LIMIT`）
+- 分析失败不自动重试，详情页给「重新分析」
+- worker 每 30 秒心跳；离线时按钮禁用
+- 分析结果不改变预审、不写台账，卡片固定注明“仅供参考”
+
+### worker 部署（宿主机，systemd）
+
+```bash
+# 1. 引擎（见 deploy/tradingagents/README-m0.md），然后确认冒烟能跑通
+# 2. 配置文件
+sudo cp deploy/systemd/noplan-worker.env.example /etc/noplan-worker.env
+sudo nano /etc/noplan-worker.env      # 填 TA_* 与 NOPLAN_WORKER_TOKEN（与网站 .env 一致）
+sudo chmod 600 /etc/noplan-worker.env
+
+# 3. systemd
+sudo cp deploy/systemd/noplan-worker.service /etc/systemd/system/noplan-worker.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now noplan-worker
+sudo systemctl status noplan-worker --no-pager
+sudo journalctl -u noplan-worker -f
+```
+
+首次启动后，详情页按钮从“离线”变为可点，说明心跳已通。
 
 ## 本地运行
 

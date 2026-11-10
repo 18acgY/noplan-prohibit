@@ -9,6 +9,8 @@ services:
     environment:
       NOPLAN_PASSWORD: ${NOPLAN_PASSWORD:?请在 .env 里设置 NOPLAN_PASSWORD}
       NOPLAN_SECRET: ${NOPLAN_SECRET:?请在 .env 里设置 NOPLAN_SECRET}
+      NOPLAN_WORKER_TOKEN: ${NOPLAN_WORKER_TOKEN:?请在 .env 里设置 NOPLAN_WORKER_TOKEN}
+      NOPLAN_DAILY_ANALYSIS_LIMIT: ${NOPLAN_DAILY_ANALYSIS_LIMIT:-10}
       NOPLAN_DB: /data/noplan.db
       TZ: Asia/Shanghai
     volumes:

@@ -11,6 +11,60 @@
   </div>
 </div>
 
+<section class="analysis-card" id="analysis">
+  <div class="analysis-head">
+    <h2>AI 分析</h2>
+    {% if analysis %}
+      {% if analysis.status == "done" %}
+        <span class="badge ok">已完成</span>
+      {% elif analysis.status == "failed" %}
+        <span class="badge bad">失败</span>
+      {% elif analysis.status == "running" %}
+        <span class="badge warn">运行中</span>
+      {% else %}
+        <span class="badge warn">排队中</span>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {% if analysis and analysis.status == "done" %}
+    <div class="analysis-rating">{{ analysis.rating or "—" }}</div>
+    {% if analysis.summary %}<p class="analysis-summary">{{ analysis.summary }}</p>{% endif %}
+    <p class="hint">
+      目标价 {{ analysis.target_price or "未提供" }}
+      · 周期 {{ analysis.horizon or "—" }}
+      {% if analysis.duration_s %}· 用时 {{ "%.0f"|format(analysis.duration_s) }} 秒{% endif %}
+    </p>
+    {% if analysis_stale %}
+    <p class="alert bad">该分析对应 {{ analysis.ticker }}，当前单据代码是 {{ ticker }}，请重新分析。</p>
+    {% endif %}
+    <a class="btn" href="/analyses/{{ analysis.id }}">查看完整分析</a>
+  {% elif analysis and analysis.status == "failed" %}
+    <p class="alert bad">分析失败：{{ analysis.error or "未知错误" }}</p>
+    {% if analysis_stale %}
+    <p class="hint">该失败任务对应 {{ analysis.ticker }}，当前单据代码是 {{ ticker }}。</p>
+    {% endif %}
+  {% elif analysis %}
+    <p class="hint">分析任务已提交，等待 worker 执行（通常 10–20 分钟）。</p>
+  {% else %}
+    <p class="hint">还没有分析。点击下方按钮，用当前证券代码触发一次 TradingAgents 分析。</p>
+  {% endif %}
+
+  <form method="post" action="/permits/{{ permit.id }}/analysis" class="analysis-actions">
+    <button class="btn primary" type="submit" {% if not can_analyze %}disabled{% endif %}>
+      {% if analysis and analysis.status == "failed" %}重新分析{% else %}运行分析{% endif %}
+    </button>
+    {% if not ticker %}
+      <span class="hint">证券代码无法识别，请先填 6 位 A 股代码。</span>
+    {% elif not worker_online %}
+      <span class="hint">分析服务离线（worker 未心跳）。</span>
+    {% elif used >= limit %}
+      <span class="hint">今日已用 {{ used }}/{{ limit }} 次，明天再来。</span>
+    {% endif %}
+  </form>
+  <p class="disclaimer">AI 分析，仅供参考，不构成投资建议。预审结论不受其影响。</p>
+</section>
+
 <div class="result-banner {{ meta[r.status].cls }}">
   <div class="result-label">{{ meta[r.status].label }}</div>
   <div class="result-msg">{{ r.message }}</div>

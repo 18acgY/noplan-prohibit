@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}AI 分析 · {{ a.ticker }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>AI 分析 <span class="code">{{ a.ticker }}</span></h1>
+  <a class="btn ghost" href="/permits/{{ a.permit_id }}">返回许可单</a>
+</div>
+
+{% if a.rating %}
+<div class="result-banner {{ 'ok' if a.rating in ['Buy', 'Overweight'] else ('warn' if a.rating == 'Hold' else 'bad') }}">
+  <div class="result-label">评级</div>
+  <div class="result-msg">{{ a.rating }}</div>
+  {% if a.summary %}<p class="analysis-summary">{{ a.summary }}</p>{% endif %}
+  <p class="hint">分析日 {{ a.analysis_date }} · 目标价 {{ a.target_price or "未提供" }} · 周期 {{ a.horizon or "—" }}</p>
+</div>
+{% endif %}
+
+{% if a.error %}
+<div class="alert bad">失败原因：{{ a.error }}</div>
+{% endif %}
+
+{% if a.full_report %}
+<section class="section">
+  <h2>完整报告</h2>
+  <pre class="report">{{ a.full_report }}</pre>
+</section>
+{% else %}
+<p class="muted">没有可展示的全文。</p>
+{% endif %}
+
+<p class="disclaimer">AI 分析，仅供参考，不构成投资建议。</p>
+{% endblock %}
