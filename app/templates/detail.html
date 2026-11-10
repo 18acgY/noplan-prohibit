@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_progress.html" import stepper with context %}
 {% block title %}详情 · 次日交易许可单{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -20,7 +21,9 @@
       {% elif analysis.status == "failed" %}
         <span class="badge bad">失败</span>
       {% elif analysis.status == "running" %}
-        <span class="badge warn">运行中</span>
+        <span class="badge warn">{% if analysis.cancel_requested %}取消中…{% else %}运行中{% endif %}</span>
+      {% elif analysis.status == "cancelled" %}
+        <span class="badge muted">已取消</span>
       {% else %}
         <span class="badge warn">排队中</span>
       {% endif %}
@@ -40,19 +43,25 @@
     {% endif %}
     <a class="btn" href="/analyses/{{ analysis.id }}">查看完整分析</a>
   {% elif analysis and analysis.status == "failed" %}
+    {{ stepper(analysis, compact=True) }}
     <p class="alert bad">分析失败：{{ analysis.error or "未知错误" }}</p>
     {% if analysis_stale %}
     <p class="hint">该失败任务对应 {{ analysis.ticker }}，当前单据代码是 {{ ticker }}。</p>
     {% endif %}
+  {% elif analysis and analysis.status == "cancelled" %}
+    {{ stepper(analysis, compact=True) }}
+    <p class="hint">这次分析已取消，不消耗当天次数，可以重新分析。</p>
   {% elif analysis %}
-    <p class="hint">分析任务已提交，等待 worker 执行（通常 10–20 分钟）。</p>
+    {{ stepper(analysis, compact=True) }}
+    <p class="hint">分析任务已提交，通常 8–20 分钟；页面会自动刷新进度。</p>
   {% else %}
     <p class="hint">还没有分析。点击下方按钮，用当前证券代码触发一次 TradingAgents 分析。</p>
   {% endif %}
 
   <form method="post" action="/permits/{{ permit.id }}/analysis" class="analysis-actions">
-    <button class="btn primary" type="submit" {% if not can_analyze %}disabled{% endif %}>
-      {% if analysis and analysis.status == "failed" %}重新分析{% else %}运行分析{% endif %}
+    <button class="btn primary" type="submit"
+            {% if not can_analyze or (analysis and analysis.status in ["queued", "running"]) %}disabled{% endif %}>
+      {% if analysis and analysis.status in ["queued", "running"] %}分析中…{% elif analysis and analysis.status in ["failed", "cancelled"] %}重新分析{% else %}运行分析{% endif %}
     </button>
     {% if not ticker %}
       <span class="hint">证券代码无法识别，请先填 6 位 A 股代码。</span>
@@ -62,6 +71,13 @@
       <span class="hint">今日已用 {{ used }}/{{ limit }} 次，明天再来。</span>
     {% endif %}
   </form>
+  {% if analysis and analysis.status in ["queued", "running"] %}
+  <form method="post" action="/analyses/{{ analysis.id }}/cancel" class="analysis-actions"
+        onsubmit="return confirm('确定取消这次分析？取消不消耗今天的次数，之后可以重新分析。');">
+    <input type="hidden" name="next" value="/permits/{{ permit.id }}#analysis">
+    <button class="btn ghost" type="submit">取消分析</button>
+  </form>
+  {% endif %}
   <p class="disclaimer">AI 分析，仅供参考，不构成投资建议。预审结论不受其影响。</p>
 </section>
 

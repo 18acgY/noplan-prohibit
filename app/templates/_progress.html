@@ -1,0 +1,47 @@
+{% macro stepper(a, compact=false) %}
+<div class="progress{% if compact %} compact{% endif %}"
+     data-analysis-id="{{ a.id }}"
+     data-status="{{ a.status }}"
+     data-stage="{{ a.stage or '' }}"
+     data-started="{{ a.started_at or a.created_at or '' }}"
+     data-stage-started="{{ a.stage_started_at or '' }}"
+     data-finished="{{ a.finished_at or '' }}"
+     data-queue-ahead="{{ a.queue_ahead or 0 }}"
+     data-worker-online="{{ 1 if worker_online else 0 }}">
+  <ol class="steps">
+    {% for key, label in a.stages %}
+    {% set idx = a.stage_index %}
+    <li class="step{% if idx is not none and loop.index0 < idx %} done{% elif idx is not none and loop.index0 == idx %} current{% endif %}"
+        data-step="{{ key }}">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="label">{{ label }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+  <p class="progress-line">
+    <span class="progress-label" data-label>
+      {%- if a.status == "queued" -%}
+        排队中{% if a.queue_ahead %}：前面还有 {{ a.queue_ahead }} 个任务{% endif %}
+      {%- elif a.status == "failed" -%}
+        失败于「{{ a.stage_label or "运行" }}」
+      {%- elif a.status == "cancelled" -%}
+        已取消{% if a.stage_label %}（停在「{{ a.stage_label }}」）{% endif %}
+      {%- elif a.status == "done" -%}
+        已完成
+      {%- elif a.status == "running" and a.cancel_requested -%}
+        取消中…
+      {%- else -%}
+        {{ a.stage_label or "运行中" }}
+      {%- endif -%}
+    </span>
+    <span class="progress-elapsed" data-elapsed></span>
+  </p>
+  {% if a.analysts and a.stage_index is not none and a.stage_index >= 1 %}
+  <p class="substeps" data-substeps>
+    {% for key, label, state in a.analysts %}
+    <span class="substep {{ state }}">{{ label }}{% if state == "completed" %} ✓{% endif %}</span>
+    {% endfor %}
+  </p>
+  {% endif %}
+</div>
+{% endmacro %}

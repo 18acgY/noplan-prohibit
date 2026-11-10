@@ -115,6 +115,7 @@ def main() -> None:
     # tradingagents/__init__.py loads .env at import time, so chdir first.
     os.chdir(REPO)
     sys.path.insert(0, str(REPO))
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
     DATA.mkdir(parents=True, exist_ok=True)
     print(f"TA_REPO={REPO}")
@@ -126,6 +127,14 @@ def main() -> None:
     _apply_streaming_shim()
 
     from cli.main import app
+
+    progress_path = os.environ.get("NOPLAN_PROGRESS_FILE")
+    if progress_path:
+        from cli import display as display_mod
+        import progress_hook
+
+        progress_hook.emit_stage(progress_path, "prepare")
+        progress_hook.install(display_mod.message_buffer, progress_path)
 
     app()
 

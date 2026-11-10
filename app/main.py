@@ -17,7 +17,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import analysis as analysis_mod
-from . import db, review
+from . import db, progress, review
+from .markdown_render import render_markdown
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -66,6 +67,23 @@ def _parse_form(form: Any) -> dict[str, Any]:
     return data
 
 
+def _analysis_view(conn: Any, row: dict[str, Any] | None) -> dict[str, Any] | None:
+    """给模板/JSON 补上阶段视图字段。"""
+    if not row:
+        return None
+    detail = progress.parse_detail(row.get("stage_detail"))
+    return {
+        **row,
+        "stages": progress.STAGES,
+        "stage_index": progress.stage_index(row.get("stage")),
+        "stage_label": progress.STAGE_LABELS.get(row.get("stage") or "", ""),
+        "detail": detail,
+        "analysts": progress.analyst_states(detail),
+        "queue_ahead": db.queue_ahead(conn, int(row["id"])),
+        "cancel_requested": bool(row.get("cancel_requested")),
+    }
+
+
 def create_app() -> FastAPI:
     password = os.environ.get("NOPLAN_PASSWORD")
     if not password:
@@ -92,6 +110,7 @@ def create_app() -> FastAPI:
     templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
     templates.env.filters["money"] = _money
     templates.env.filters["pct"] = _pct
+    templates.env.filters["markdown"] = render_markdown
 
     @app.exception_handler(AuthRequired)
     async def _auth_redirect(request: Request, exc: AuthRequired) -> RedirectResponse:
@@ -200,6 +219,7 @@ def create_app() -> FastAPI:
             latest = db.latest_analysis_for_permit(conn, permit_id)
             online = db.worker_online(conn)
             used = db.daily_analysis_count(conn)
+            view = _analysis_view(conn, latest)
         if not permit:
             raise HTTPException(status_code=404, detail="许可单不存在")
         result = review.review(permit, t)
@@ -213,7 +233,7 @@ def create_app() -> FastAPI:
                 "r": result,
                 "meta": STATUS_META,
                 "thresholds": t,
-                "analysis": latest,
+                "analysis": view,
                 "ticker": ticker,
                 "analysis_stale": bool(latest and ticker and latest["ticker"] != ticker),
                 "worker_online": online,
@@ -252,9 +272,93 @@ def create_app() -> FastAPI:
         require(request)
         with closing(db.connect(db_path)) as conn:
             row = db.get_analysis(conn, analysis_id)
+            view = _analysis_view(conn, row)
+            online = db.worker_online(conn)
+        if not view:
+            raise HTTPException(status_code=404, detail="分析不存在")
+        return render(
+            request,
+            "analysis.html",
+            {"a": view, "worker_online": online},
+        )
+
+    @app.get("/analyses/{analysis_id}/status.json")
+    def analysis_status(request: Request, analysis_id: int):
+        require(request)
+        with closing(db.connect(db_path)) as conn:
+            row = db.get_analysis(conn, analysis_id)
+            view = _analysis_view(conn, row)
+            online = db.worker_online(conn)
+        if not view:
+            raise HTTPException(status_code=404, detail="分析不存在")
+        return JSONResponse(
+            {
+                "status": view["status"],
+                "stage": view["stage"],
+                "stage_index": view["stage_index"],
+                "stage_label": view["stage_label"],
+                "detail": view["detail"],
+                "started_at": view["started_at"],
+                "stage_started_at": view["stage_started_at"],
+                "finished_at": view["finished_at"],
+                "queue_ahead": view["queue_ahead"],
+                "cancel_requested": view["cancel_requested"],
+                "worker_online": online,
+                "error": view["error"],
+            }
+        )
+
+    @app.post("/analyses/{analysis_id}/cancel")
+    async def analysis_cancel(request: Request, analysis_id: int):
+        require(request)
+        form = await request.form()
+        with closing(db.connect(db_path)) as conn:
+            row = db.request_cancel(conn, analysis_id)
+        if row is None:
+            raise HTTPException(status_code=409, detail="该分析已结束，无法取消")
+        target = str(form.get("next") or "")
+        if not target.startswith("/") or target.startswith("//"):
+            target = f"/analyses/{analysis_id}"
+        return RedirectResponse(target, status_code=303)
+
+    @app.get("/internal/analysis/{analysis_id}/state")
+    def internal_state(request: Request, analysis_id: int):
+        require_worker(request)
+        with closing(db.connect(db_path)) as conn:
+            row = db.get_analysis(conn, analysis_id)
         if not row:
             raise HTTPException(status_code=404, detail="分析不存在")
-        return render(request, "analysis.html", {"a": row})
+        return {"status": row["status"], "cancel_requested": bool(row["cancel_requested"])}
+
+    @app.post("/internal/analysis/{analysis_id}/progress")
+    async def internal_progress(request: Request, analysis_id: int):
+        require_worker(request)
+        try:
+            body = await request.json()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="请求体必须是 JSON") from exc
+        events = body.get("events") if isinstance(body, dict) else None
+        if not isinstance(events, list):
+            raise HTTPException(status_code=400, detail="events 必须是数组")
+        with closing(db.connect(db_path)) as conn:
+            if not db.get_analysis(conn, analysis_id):
+                raise HTTPException(status_code=404, detail="分析不存在")
+            applied = 0
+            for event in events:
+                if not isinstance(event, dict):
+                    raise HTTPException(status_code=400, detail="事件必须是对象")
+                try:
+                    db.update_progress(
+                        conn,
+                        analysis_id,
+                        stage=event.get("stage"),
+                        agent=event.get("agent"),
+                        state=event.get("state"),
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                applied += 1
+        return {"ok": True, "applied": applied}
 
     @app.post("/internal/worker/heartbeat")
     async def internal_heartbeat(request: Request):

@@ -8,7 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /srv/app
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 60 --retries 5 \
+      -i "${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}" \
+      -r requirements.txt
 
 COPY app ./app
 

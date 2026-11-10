@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from . import progress
 
 TEXT_FIELDS = [
     "fill_date",
@@ -84,6 +87,11 @@ CREATE TABLE IF NOT EXISTS analyses (
   error TEXT,
   run_dir TEXT,
   duration_s REAL,
+  stage TEXT,
+  stage_detail TEXT,
+  stage_started_at TEXT,
+  progress_updated_at TEXT,
+  cancel_requested INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   started_at TEXT,
   worker_claimed_at TEXT,
@@ -110,9 +118,22 @@ def init_db(path: str | Path) -> None:
     conn = connect(path)
     try:
         conn.executescript(SCHEMA)
+        _migrate(conn)
         conn.commit()
     finally:
         conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """给旧库补新列（CREATE TABLE IF NOT EXISTS 不会加列）。"""
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(analyses)")}
+    for column in ("stage", "stage_detail", "stage_started_at", "progress_updated_at"):
+        if column not in existing:
+            conn.execute(f"ALTER TABLE analyses ADD COLUMN {column} TEXT")
+    if "cancel_requested" not in existing:
+        conn.execute(
+            "ALTER TABLE analyses ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0"
+        )
 
 
 def _now() -> str:
@@ -230,14 +251,101 @@ def enqueue_analysis(
 
 
 def claim_next_analysis(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    now = _now()
     row = conn.execute(
-        "UPDATE analyses SET status = 'running', started_at = ?, worker_claimed_at = ? "
+        "UPDATE analyses SET status = 'running', started_at = ?, worker_claimed_at = ?, "
+        "stage = 'prepare', stage_started_at = ?, progress_updated_at = ? "
         "WHERE id = (SELECT id FROM analyses WHERE status = 'queued' ORDER BY id LIMIT 1) "
         "RETURNING *",
-        (_now(), _now()),
+        (now, now, now, now),
     ).fetchone()
     conn.commit()
     return dict(row) if row else None
+
+
+def queue_ahead(conn: sqlite3.Connection, analysis_id: int) -> int:
+    """同一队列里，排在这条任务前面的任务数。"""
+    row = conn.execute(
+        "SELECT COUNT(*) AS c FROM analyses WHERE status = 'queued' AND id < ?",
+        (analysis_id,),
+    ).fetchone()
+    return int(row["c"])
+
+
+def request_cancel(conn: sqlite3.Connection, analysis_id: int) -> dict[str, Any] | None:
+    """排队中直接取消；运行中只打标记，等 worker 收尾。
+
+    已完成 / 已失败的任务返回 None（调用方提示无法取消）。
+    """
+    row = get_analysis(conn, analysis_id)
+    if not row:
+        return None
+
+    if row["status"] == "queued":
+        now = _now()
+        cursor = conn.execute(
+            "UPDATE analyses SET status = 'cancelled', finished_at = ?, "
+            "progress_updated_at = ? WHERE id = ? AND status = 'queued'",
+            (now, now, analysis_id),
+        )
+        conn.commit()
+        if cursor.rowcount:
+            return get_analysis(conn, analysis_id)
+        # 刚被 worker 领走：继续按运行中处理
+        row = get_analysis(conn, analysis_id)
+
+    if row and row["status"] == "running":
+        cursor = conn.execute(
+            "UPDATE analyses SET cancel_requested = 1, progress_updated_at = ? "
+            "WHERE id = ? AND status = 'running'",
+            (_now(), analysis_id),
+        )
+        conn.commit()
+        if cursor.rowcount:
+            return get_analysis(conn, analysis_id)
+
+    return None
+
+
+def update_progress(
+    conn: sqlite3.Connection,
+    analysis_id: int,
+    *,
+    stage: str | None = None,
+    agent: str | None = None,
+    state: str | None = None,
+) -> dict[str, Any] | None:
+    """写入阶段或某个 agent 的状态；阶段只前进不后退。"""
+    row = conn.execute("SELECT * FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
+    if not row:
+        return None
+    now = _now()
+    updates: dict[str, Any] = {"progress_updated_at": now}
+
+    if stage:
+        if progress.stage_index(stage) is None:
+            raise ValueError(f"未知阶段：{stage}")
+        new_stage = progress.advance(row["stage"], stage)
+        if new_stage != row["stage"]:
+            updates["stage"] = new_stage
+            updates["stage_started_at"] = now
+
+    if agent and state:
+        if agent not in progress.AGENT_KEYS:
+            raise ValueError(f"未知 agent：{agent}")
+        if state not in progress.VALID_STATES:
+            raise ValueError(f"未知状态：{state}")
+        detail = progress.parse_detail(row["stage_detail"])
+        detail[progress.AGENT_KEYS[agent]] = state
+        updates["stage_detail"] = json.dumps(detail, ensure_ascii=False)
+
+    assignments = ", ".join(f"{key} = ?" for key in updates)
+    conn.execute(
+        f"UPDATE analyses SET {assignments} WHERE id = ?",
+        [*updates.values(), analysis_id],
+    )
+    conn.commit()
+    return get_analysis(conn, analysis_id)
 
 
 def finish_analysis(
@@ -254,12 +362,12 @@ def finish_analysis(
     run_dir: str | None = None,
     duration_s: float | None = None,
 ) -> None:
-    if status not in ("done", "failed"):
-        raise ValueError("status 只能是 done / failed")
+    if status not in ("done", "failed", "cancelled"):
+        raise ValueError("status 只能是 done / failed / cancelled")
     conn.execute(
         "UPDATE analyses SET status = ?, rating = ?, summary = ?, target_price = ?, "
         "horizon = ?, full_report = ?, error = ?, run_dir = ?, duration_s = ?, "
-        "finished_at = ? WHERE id = ?",
+        "cancel_requested = 0, progress_updated_at = ?, finished_at = ? WHERE id = ?",
         (
             status,
             rating,
@@ -270,6 +378,7 @@ def finish_analysis(
             error,
             run_dir,
             duration_s,
+            _now(),
             _now(),
             analysis_id,
         ),

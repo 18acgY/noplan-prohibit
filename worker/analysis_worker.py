@@ -34,6 +34,7 @@ TA_ANALYSTS = os.environ.get("TA_ANALYSTS", "market,news,fundamentals")
 TA_TIMEOUT_MIN = int(os.environ.get("TA_TIMEOUT_MIN", "20"))
 POLL_SEC = int(os.environ.get("TA_POLL_SEC", "5"))
 HEARTBEAT_SEC = int(os.environ.get("TA_HEARTBEAT_SEC", "30"))
+CANCEL_POLL_SEC = float(os.environ.get("TA_CANCEL_POLL_SEC", "5"))
 
 REPORTS_SUBDIR = "reports"
 _STOP = threading.Event()
@@ -94,6 +95,80 @@ def _post(path: str, payload: dict | None = None, timeout: int = 15) -> tuple[in
         return exc.code, exc.read()
 
 
+def _get(path: str, timeout: int = 10) -> tuple[int, str]:
+    request = urllib.request.Request(
+        f"{API}{path}",
+        method="GET",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.status, response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", "replace")
+    except Exception as exc:  # noqa: BLE001
+        return 0, str(exc)
+
+
+def cancel_requested(job_id: int) -> bool:
+    """网站是否要求取消这个任务。网络异常时不误杀。"""
+    status, body = _get(f"/internal/analysis/{job_id}/state")
+    if status == 404:
+        return True  # 任务已不存在，停掉别再烧钱
+    if status != 200:
+        return False
+    try:
+        return bool(json.loads(body).get("cancel_requested"))
+    except (ValueError, AttributeError):
+        return False
+
+
+def terminate_process(proc: subprocess.Popen, grace: float = 10.0) -> None:
+    """先给整个进程组 SIGTERM，grace 秒不退再 SIGKILL。"""
+    if proc.poll() is not None:
+        return
+    if hasattr(os, "killpg"):
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except OSError:
+            proc.terminate()
+    else:
+        proc.terminate()
+    try:
+        proc.wait(timeout=grace)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    if hasattr(os, "killpg"):
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except OSError:
+            proc.kill()
+    else:
+        proc.kill()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def wait_process(
+    proc: subprocess.Popen, job_id: int, started: float, timeout_s: float
+) -> tuple[str, int | None]:
+    """等子进程结束，返回 (原因, 退出码)：finished / timeout / cancelled。"""
+    while True:
+        code = proc.poll()
+        if code is not None:
+            return "finished", code
+        if cancel_requested(job_id):
+            terminate_process(proc)
+            return "cancelled", None
+        if time.time() - started > timeout_s:
+            terminate_process(proc)
+            return "timeout", None
+        time.sleep(CANCEL_POLL_SEC)
+
+
 def heartbeat_loop() -> None:
     while not _STOP.is_set():
         try:
@@ -101,6 +176,81 @@ def heartbeat_loop() -> None:
         except Exception as exc:  # noqa: BLE001 - 心跳失败不该杀 worker
             print(f"[worker] heartbeat failed: {exc}", flush=True)
         _STOP.wait(HEARTBEAT_SEC)
+
+
+class ProgressTail:
+    """增量读取 launcher 写的 JSONL 进度文件。"""
+
+    def __init__(self, path: Path):
+        self.path = Path(path)
+        self.offset = 0
+        self.buffer = ""
+
+    def poll(self) -> list[dict]:
+        if not self.path.exists():
+            return []
+        try:
+            with self.path.open("r", encoding="utf-8") as fh:
+                fh.seek(self.offset)
+                chunk = fh.read()
+                self.offset = fh.tell()
+        except OSError:
+            return []
+        self.buffer += chunk
+        *lines, rest = self.buffer.split("\n")
+        self.buffer = rest
+        events = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                value = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(value, dict):
+                events.append(value)
+        return events
+
+
+def progress_path(job_id: int, started: float) -> Path:
+    return TA_DATA / "logs" / f"progress-{job_id}-{int(started)}.jsonl"
+
+
+def subprocess_env(job_id: int, progress_file: Path) -> dict[str, str]:
+    return {
+        **os.environ,
+        "TA_REPO": str(TA_REPO),
+        "TA_DATA": str(TA_DATA),
+        "PYTHONUTF8": "1",
+        "TZ": "Asia/Shanghai",
+        "NOPLAN_PROGRESS_FILE": str(progress_file),
+    }
+
+
+def forward_events(job_id: int, events: list[dict]) -> None:
+    """把进度事件转发给网站；失败只记日志，不影响分析。"""
+    if not events:
+        return
+    try:
+        status, body = _post(
+            f"/internal/analysis/{job_id}/progress",
+            {"events": events},
+            timeout=15,
+        )
+        if status != 200:
+            print(f"[worker] progress rejected {status} {body[:120]!r}", flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[worker] progress forward failed: {exc}", flush=True)
+
+
+def tail_loop(tail: ProgressTail, job_id: int, stop: threading.Event) -> None:
+    while not stop.is_set():
+        forward_events(job_id, tail.poll())
+        stop.wait(1.0)
+    # 收尾：把进程结束前写入的最后几行也送出去
+    time.sleep(0.2)
+    forward_events(job_id, tail.poll())
 
 
 def run_analysis(job: dict) -> dict:
@@ -111,6 +261,7 @@ def run_analysis(job: dict) -> dict:
     started = time.time()
     log_path = TA_DATA / "logs" / f"worker-{job['id']}-{int(started)}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    progress_file = progress_path(job["id"], started)
 
     cmd = [
         TA_PYTHON,
@@ -126,67 +277,31 @@ def run_analysis(job: dict) -> dict:
         "--no-show",
         "--no-html",
     ]
-    env = {
-        **os.environ,
-        "TA_REPO": str(TA_REPO),
-        "TA_DATA": str(TA_DATA),
-        "PYTHONUTF8": "1",
-        "TZ": "Asia/Shanghai",
-    }
+    env = subprocess_env(job["id"], progress_file)
     print(f"[worker] job={job['id']} ticker={ticker} date={analysis_date}", flush=True)
+    tail = ProgressTail(progress_file)
+    tail_stop = threading.Event()
+    tail_thread = threading.Thread(
+        target=tail_loop, args=(tail, job["id"], tail_stop), daemon=True
+    )
+    tail_thread.start()
+    spawn_kwargs: dict = {}
+    if hasattr(os, "setsid"):
+        # POSIX：让分析进程自成进程组，取消时能连同子进程一起杀
+        spawn_kwargs["start_new_session"] = True
     try:
         with open(log_path, "w", encoding="utf-8") as log:
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 cmd,
                 cwd=str(TA_REPO),
                 env=env,
                 stdout=log,
                 stderr=subprocess.STDOUT,
-                timeout=TA_TIMEOUT_MIN * 60,
+                **spawn_kwargs,
             )
-        duration = time.time() - started
-        if proc.returncode != 0:
-            tail = _tail(log_path)
-            return {
-                "status": "failed",
-                "error": f"分析进程退出码 {proc.returncode}\n{tail}",
-                "run_dir": str(log_path),
-                "duration_s": duration,
-            }
-
-        report_dir = find_report_dir(reports_root, ticker, started)
-        if report_dir is None:
-            return {
-                "status": "failed",
-                "error": f"没有找到 {ticker} 的新报告目录（{reports_root}）\n{_tail(log_path)}",
-                "run_dir": str(log_path),
-                "duration_s": duration,
-            }
-
-        decision_path = report_dir / "5_portfolio" / "decision.md"
-        if not decision_path.exists():
-            decision_path = report_dir / "decision.md"
-        parsed = parse_decision(decision_path.read_text(encoding="utf-8")) if decision_path.exists() else {}
-        complete_path = report_dir / "complete_report.md"
-        full_report = complete_path.read_text(encoding="utf-8") if complete_path.exists() else ""
-
-        return {
-            "status": "done",
-            "rating": parsed.get("rating"),
-            "summary": parsed.get("summary"),
-            "target_price": parsed.get("target_price"),
-            "horizon": parsed.get("horizon"),
-            "full_report": full_report,
-            "run_dir": str(report_dir),
-            "duration_s": duration,
-        }
-    except subprocess.TimeoutExpired:
-        return {
-            "status": "failed",
-            "error": f"超时（>{TA_TIMEOUT_MIN} 分钟），已终止",
-            "run_dir": str(log_path),
-            "duration_s": time.time() - started,
-        }
+            reason, exit_code = wait_process(
+                proc, job["id"], started, TA_TIMEOUT_MIN * 60
+            )
     except Exception as exc:  # noqa: BLE001
         return {
             "status": "failed",
@@ -194,6 +309,68 @@ def run_analysis(job: dict) -> dict:
             "run_dir": str(log_path),
             "duration_s": time.time() - started,
         }
+    finally:
+        # 先停 tail 再删文件，保证最后几条事件已经转发出去
+        tail_stop.set()
+        tail_thread.join(timeout=5)
+        try:
+            progress_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    duration = time.time() - started
+    if reason == "cancelled":
+        return {
+            "status": "cancelled",
+            "run_dir": str(log_path),
+            "duration_s": duration,
+        }
+    if reason == "timeout":
+        return {
+            "status": "failed",
+            "error": f"超时（>{TA_TIMEOUT_MIN} 分钟），已终止",
+            "run_dir": str(log_path),
+            "duration_s": duration,
+        }
+
+    if exit_code == 0:
+        forward_events(job["id"], [{"stage": "report"}])
+
+    if exit_code != 0:
+        tail = _tail(log_path)
+        return {
+            "status": "failed",
+            "error": f"分析进程退出码 {exit_code}\n{tail}",
+            "run_dir": str(log_path),
+            "duration_s": duration,
+        }
+
+    report_dir = find_report_dir(reports_root, ticker, started)
+    if report_dir is None:
+        return {
+            "status": "failed",
+            "error": f"没有找到 {ticker} 的新报告目录（{reports_root}）\n{_tail(log_path)}",
+            "run_dir": str(log_path),
+            "duration_s": duration,
+        }
+
+    decision_path = report_dir / "5_portfolio" / "decision.md"
+    if not decision_path.exists():
+        decision_path = report_dir / "decision.md"
+    parsed = parse_decision(decision_path.read_text(encoding="utf-8")) if decision_path.exists() else {}
+    complete_path = report_dir / "complete_report.md"
+    full_report = complete_path.read_text(encoding="utf-8") if complete_path.exists() else ""
+
+    return {
+        "status": "done",
+        "rating": parsed.get("rating"),
+        "summary": parsed.get("summary"),
+        "target_price": parsed.get("target_price"),
+        "horizon": parsed.get("horizon"),
+        "full_report": full_report,
+        "run_dir": str(report_dir),
+        "duration_s": duration,
+    }
 
 
 def _tail(path: Path, limit: int = 2000) -> str:
