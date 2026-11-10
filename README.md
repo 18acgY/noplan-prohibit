@@ -33,6 +33,11 @@
 
 应用已改为只监听 `127.0.0.1:8080`，公网只开 nginx 的 80 端口。
 
+## TradingAgents 分析集成（开发中）
+
+许可单可以一键触发 TradingAgents 分析，摘要回写详情页。迁移与冒烟步骤见
+[deploy/tradingagents/README-m0.md](deploy/tradingagents/README-m0.md)。
+
 ## 本地运行
 
 ```bash
