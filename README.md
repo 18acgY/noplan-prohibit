@@ -353,3 +353,9 @@ cp data/noplan.db data/noplan.db.$(date +%F)
 - 证券代码不校验真伪
 - worker 离线时，运行中的取消会停在「取消中…」，等 worker 回来才落定
 - 阶段进度依赖 TA 侧 `progress_hook`，TA 升级后需确认 hook 仍能挂上
+
+## 许可证
+
+Apache License 2.0，见 [LICENSE](LICENSE)。
+
+本项目仅供个人研究与自用，不构成任何投资建议。
