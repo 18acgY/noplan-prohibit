@@ -45,6 +45,16 @@ FastAPI + SQLite 存数据，跑在 Linux + Docker 上；AI 分析由宿主机�
 - 排队中和运行中都能「取消分析」；取消不消耗当日次数，之后可重新分析
 - 分析结果不改变预审、不写台账，卡片固定注明“仅供参考”
 
+### 运行截图
+
+<img width="2549" height="1191" alt="image" src="https://github.com/user-attachments/assets/c0898ed4-a761-4c2a-9fd0-d1dbb49f8902" />
+
+<img width="2549" height="1191" alt="image" src="https://github.com/user-attachments/assets/bb3ad1fb-021e-4f3d-a5f6-273f14322dba" />
+
+<img width="2549" height="1191" alt="image" src="https://github.com/user-attachments/assets/8f1f561b-4435-49ae-b891-d24d1b130580" />
+
+
+
 ### 运维
 
 - 应用只监听 `127.0.0.1:8080`，公网只开 nginx 的 80 端口（见 `deploy/nginx/noplan.conf`）
