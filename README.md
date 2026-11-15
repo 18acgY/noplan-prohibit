@@ -190,8 +190,6 @@ NOPLAN_PASSWORD=你的密码 NOPLAN_SECRET=随便一串随机字符 NOPLAN_DB=./
 
 打开 <http://127.0.0.1:8000>。本地没有 worker 时，点「运行分析」会提示服务离线。
 
-部署到服务器（Docker + nginx + 宿主机 worker）的完整步骤见 [README](README.md#部署到服务器)。
-
 测试：
 
 ```bash
