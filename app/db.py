@@ -212,21 +212,35 @@ def daily_analysis_count(conn: sqlite3.Connection) -> int:
     return int(row["c"])
 
 
+def done_analysis_for(
+    conn: sqlite3.Connection, ticker: str, analysis_date: str
+) -> dict[str, Any] | None:
+    """今天这只票已经跑成的结果；没有则 None。"""
+    row = conn.execute(
+        "SELECT * FROM analyses WHERE ticker = ? AND analysis_date = ? AND status = 'done' "
+        "ORDER BY id DESC LIMIT 1",
+        (ticker, analysis_date),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def enqueue_analysis(
     conn: sqlite3.Connection,
     permit_id: int,
     ticker: str,
     analysis_date: str,
     daily_limit: int | None = None,
+    force: bool = False,
 ) -> tuple[dict[str, Any], bool]:
-    """返回 (任务行, 是否新建)。同 ticker+日期已有成功结果时直接复用。"""
-    done = conn.execute(
-        "SELECT * FROM analyses WHERE ticker = ? AND analysis_date = ? AND status = 'done' "
-        "ORDER BY id DESC LIMIT 1",
-        (ticker, analysis_date),
-    ).fetchone()
-    if done:
-        return dict(done), False
+    """返回 (任务行, 是否新建)。
+
+    默认同 ticker+日期已有成功结果时直接复用；``force=True`` 时跳过复用，
+    重新排一次任务（仍会复用排队中/运行中的任务，避免重复建单）。
+    """
+    if not force:
+        done = done_analysis_for(conn, ticker, analysis_date)
+        if done:
+            return done, False
 
     active = conn.execute(
         "SELECT * FROM analyses WHERE ticker = ? AND analysis_date = ? "

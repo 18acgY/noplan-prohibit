@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import analysis as analysis_mod
-from . import db, progress, review
+from . import db, progress, ratings, review
 from .markdown_render import render_markdown
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -111,6 +111,8 @@ def create_app() -> FastAPI:
     templates.env.filters["money"] = _money
     templates.env.filters["pct"] = _pct
     templates.env.filters["markdown"] = render_markdown
+    templates.env.globals["rating_info"] = ratings.info
+    templates.env.globals["rating_legend"] = ratings.legend
 
     @app.exception_handler(AuthRequired)
     async def _auth_redirect(request: Request, exc: AuthRequired) -> RedirectResponse:
@@ -244,8 +246,11 @@ def create_app() -> FastAPI:
         )
 
     @app.post("/permits/{permit_id}/analysis")
-    def permit_analysis(request: Request, permit_id: int):
+    async def permit_analysis(request: Request, permit_id: int):
         require(request)
+        form = await request.form()
+        force = str(form.get("force") or "") == "1"
+
         with closing(db.connect(db_path)) as conn:
             permit = db.get_permit(conn, permit_id)
             if not permit:
@@ -255,17 +260,56 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=400, detail="证券代码无法识别，请填 6 位 A 股代码")
             if not db.worker_online(conn):
                 raise HTTPException(status_code=409, detail="分析服务离线，请稍后再试")
+            analysis_date = analysis_mod.today_local().isoformat()
+            if not force and db.done_analysis_for(conn, ticker, analysis_date):
+                return RedirectResponse(
+                    f"/permits/{permit_id}/analysis/confirm", status_code=303
+                )
             try:
                 db.enqueue_analysis(
                     conn,
                     permit_id,
                     ticker,
-                    analysis_mod.today_local().isoformat(),
+                    analysis_date,
                     daily_limit(),
+                    force=force,
                 )
             except db.DailyLimitError as exc:
                 raise HTTPException(status_code=429, detail=str(exc)) from exc
         return RedirectResponse(f"/permits/{permit_id}#analysis", status_code=303)
+
+    @app.get("/permits/{permit_id}/analysis/confirm")
+    def permit_analysis_confirm(request: Request, permit_id: int):
+        """同票同日已有结果：让用户选择查看，或坚持重新分析。"""
+        require(request)
+        with closing(db.connect(db_path)) as conn:
+            permit = db.get_permit(conn, permit_id)
+            if not permit:
+                raise HTTPException(status_code=404, detail="许可单不存在")
+            ticker = analysis_mod.ticker_for(permit.get("code"))
+            if not ticker:
+                raise HTTPException(status_code=400, detail="证券代码无法识别，请填 6 位 A 股代码")
+            analysis_date = analysis_mod.today_local().isoformat()
+            done = db.done_analysis_for(conn, ticker, analysis_date)
+            if not done:
+                return RedirectResponse(f"/permits/{permit_id}#analysis", status_code=303)
+            view = _analysis_view(conn, done)
+            online = db.worker_online(conn)
+            used = db.daily_analysis_count(conn)
+        limit = daily_limit()
+        return render(
+            request,
+            "analysis_confirm.html",
+            {
+                "permit": permit,
+                "ticker": ticker,
+                "analysis": view,
+                "worker_online": online,
+                "used": used,
+                "limit": limit,
+                "can_retry": online and used < limit,
+            },
+        )
 
     @app.get("/analyses/{analysis_id}")
     def analysis_report(request: Request, analysis_id: int):
