@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}分析确认 · 次日交易许可单{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>今天已经分析过 {{ ticker }}</h1>
+</div>
+
+<section class="analysis-card">
+  <p class="hint">
+    分析日 {{ analysis.analysis_date }}
+    {% if analysis.finished_at %}· 完成于 {{ analysis.finished_at }}{% endif %}
+    {% if analysis.duration_s %}· 用时 {{ "%.0f"|format(analysis.duration_s) }} 秒{% endif %}
+  </p>
+
+  <div class="analysis-rating">{{ analysis.rating or "—" }}</div>
+  {% if analysis.summary %}<p class="analysis-summary">{{ analysis.summary }}</p>{% endif %}
+  <p class="hint">目标价 {{ analysis.target_price or "未提供" }} · 周期 {{ analysis.horizon or "—" }}</p>
+
+  {% if analysis.full_report and "DATA_UNAVAILABLE" in analysis.full_report %}
+  <p class="alert warn">这份结果有数据源不可用（DATA_UNAVAILABLE），结论可能偏保守；详见报告。</p>
+  {% endif %}
+
+  <div class="analysis-actions">
+    <a class="btn primary" href="/analyses/{{ analysis.id }}">查看已有结果</a>
+
+    {% if can_retry %}
+    <form method="post" action="/permits/{{ permit.id }}/analysis">
+      <input type="hidden" name="force" value="1">
+      <button class="btn ghost" type="submit">继续分析（重新跑一轮）</button>
+    </form>
+    <p class="hint">继续分析会重新调用模型、消耗今日次数（已用 {{ used }} / {{ limit }}）。</p>
+    {% else %}
+    <p class="alert warn">
+      {% if not worker_online %}分析服务离线，暂时不能继续分析。{% else %}今日次数已用完（{{ used }} / {{ limit }}），只能查看已有结果。{% endif %}
+    </p>
+    {% endif %}
+
+    <a class="btn ghost" href="/permits/{{ permit.id }}">返回许可单</a>
+  </div>
+</section>
+{% endblock %}

@@ -27,12 +27,34 @@
 {% endif %}
 
 {% if a.rating %}
-<div class="result-banner {{ 'ok' if a.rating in ['Buy', 'Overweight'] else ('warn' if a.rating == 'Hold' else 'bad') }}">
+{% set rating_view = rating_info(a.rating) %}
+<div class="result-banner {{ rating_view.tone }}">
   <div class="result-label">评级</div>
-  <div class="result-msg">{{ a.rating }}</div>
-  {% if a.summary %}<p class="analysis-summary">{{ a.summary }}</p>{% endif %}
+  <div class="result-msg">{{ rating_view.zh }} <span class="rating-en">{{ a.rating }}</span></div>
+  <p class="rating-action">{{ rating_view.action }}</p>
+  <p class="hint">{{ rating_view.detail }}</p>
+  {% if a.summary %}
+  <p class="summary-label">模型原文摘要</p>
+  <p class="analysis-summary">{{ a.summary }}</p>
+  {% endif %}
   <p class="hint">分析日 {{ a.analysis_date }} · 目标价 {{ a.target_price or "未提供" }} · 周期 {{ a.horizon or "—" }}</p>
 </div>
+
+<details class="rating-legend">
+  <summary>五档评级怎么看？</summary>
+  <table>
+    {% for key, item in rating_legend() %}
+    <tr>
+      <td><b>{{ item.zh }}</b> <span class="rating-en">{{ key }}</span></td>
+      <td>{{ item.action }}；{{ item.detail }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</details>
+{% endif %}
+
+{% if a.full_report and "DATA_UNAVAILABLE" in a.full_report %}
+<div class="alert warn">本次分析有数据源不可用（DATA_UNAVAILABLE），结论可能偏保守；报告中的价位与指标可能缺失。</div>
 {% endif %}
 
 {% if a.error %}

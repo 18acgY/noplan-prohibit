@@ -31,13 +31,33 @@
   </div>
 
   {% if analysis and analysis.status == "done" %}
-    <div class="analysis-rating">{{ analysis.rating or "—" }}</div>
-    {% if analysis.summary %}<p class="analysis-summary">{{ analysis.summary }}</p>{% endif %}
+    {% set rating_view = rating_info(analysis.rating) %}
+    <div class="analysis-rating">{{ rating_view.zh }} <span class="rating-en">{{ analysis.rating or "" }}</span></div>
+    <p class="rating-action">{{ rating_view.action }}</p>
+    <p class="hint">{{ rating_view.detail }}</p>
+    {% if analysis.summary %}
+    <p class="summary-label">模型原文摘要</p>
+    <p class="analysis-summary">{{ analysis.summary }}</p>
+    {% endif %}
     <p class="hint">
       目标价 {{ analysis.target_price or "未提供" }}
       · 周期 {{ analysis.horizon or "—" }}
       {% if analysis.duration_s %}· 用时 {{ "%.0f"|format(analysis.duration_s) }} 秒{% endif %}
     </p>
+    <details class="rating-legend">
+      <summary>五档评级怎么看？</summary>
+      <table>
+        {% for key, item in rating_legend() %}
+        <tr>
+          <td><b>{{ item.zh }}</b> <span class="rating-en">{{ key }}</span></td>
+          <td>{{ item.action }}；{{ item.detail }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </details>
+    {% if analysis.full_report and "DATA_UNAVAILABLE" in analysis.full_report %}
+    <p class="alert warn">本次分析有数据源不可用（DATA_UNAVAILABLE），结论可能偏保守；详见完整报告。</p>
+    {% endif %}
     {% if analysis_stale %}
     <p class="alert bad">该分析对应 {{ analysis.ticker }}，当前单据代码是 {{ ticker }}，请重新分析。</p>
     {% endif %}
