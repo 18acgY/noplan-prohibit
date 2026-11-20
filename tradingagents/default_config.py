@@ -154,14 +154,19 @@ def build_default_config() -> dict:
         # Category-level configuration (default for all tools in category).
         # The configured value is the exact vendor chain — requests are NOT silently
         # routed to vendors you didn't choose. For ordered fallback, list several,
-        # e.g. "yfinance,alpha_vantage". "default" uses all available vendors.
+        # e.g. "akshare,yfinance". "default" uses all available vendors.
+        # akshare leads because it is the only vendor that covers A-share company
+        # news and report-level statements; it declines non-A-share symbols with
+        # NoMarketDataError, so foreign tickers fall through to the vendors behind
+        # it. Omitting it here registers the vendor and never calls it: the chain
+        # is the configured list, not the registry order.
         "data_vendors": {
-            "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
-            "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
+            "core_stock_apis": "akshare,yfinance",       # Options: akshare, alpha_vantage, yfinance
+            "technical_indicators": "akshare,yfinance",  # Options: akshare, alpha_vantage, yfinance
             # Statements come from SEC EDGAR as filed (US filers), then Yahoo; the
         # overview and insider tools, which SEC EDGAR does not serve, from Yahoo.
-        "fundamental_data": "sec_edgar,yfinance",  # Options: sec_edgar, alpha_vantage, yfinance
-            "news_data": "yfinance",             # Options: alpha_vantage, yfinance
+        "fundamental_data": "sec_edgar,akshare,yfinance",  # Options: sec_edgar, akshare, alpha_vantage, yfinance
+            "news_data": "akshare,yfinance",             # Options: akshare, alpha_vantage, yfinance
             "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
             "prediction_markets": "polymarket",  # Options: polymarket (keyless)
         },

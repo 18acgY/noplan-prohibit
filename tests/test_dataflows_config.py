@@ -20,7 +20,12 @@ class DataflowsConfigIsolationTests(unittest.TestCase):
         cfg["tool_vendors"]["get_stock_data"] = "alpha_vantage"
 
         fresh = get_config()
-        self.assertEqual(fresh["data_vendors"]["core_stock_apis"], "yfinance")
+        # Asserted against the shipped default rather than a literal, so this test
+        # keeps checking isolation (its actual subject) when the default changes.
+        self.assertEqual(
+            fresh["data_vendors"]["core_stock_apis"],
+            default_config.DEFAULT_CONFIG["data_vendors"]["core_stock_apis"],
+        )
         self.assertNotIn("get_stock_data", fresh["tool_vendors"])
 
     def test_set_config_does_not_alias_caller_nested_dicts(self):
@@ -48,9 +53,15 @@ class DataflowsConfigIsolationTests(unittest.TestCase):
 
         fresh = get_config()
         self.assertEqual(fresh["data_vendors"]["core_stock_apis"], "alpha_vantage")
-        self.assertEqual(fresh["data_vendors"]["technical_indicators"], "yfinance")
-        self.assertEqual(fresh["data_vendors"]["fundamental_data"], "sec_edgar,yfinance")
-        self.assertEqual(fresh["data_vendors"]["news_data"], "yfinance")
+        # The untouched categories must still hold whatever the shipped defaults are.
+        defaults = default_config.DEFAULT_CONFIG["data_vendors"]
+        self.assertEqual(
+            fresh["data_vendors"]["technical_indicators"], defaults["technical_indicators"]
+        )
+        self.assertEqual(
+            fresh["data_vendors"]["fundamental_data"], defaults["fundamental_data"]
+        )
+        self.assertEqual(fresh["data_vendors"]["news_data"], defaults["news_data"])
 
     def test_nested_dict_updates_merge_one_level_deep(self):
         set_config({"tool_vendors": {"get_stock_data": "alpha_vantage"}})
@@ -95,7 +106,10 @@ def test_a_run_reads_its_own_graphs_vendors_not_the_last_graph_built():
     set_config(first)                                   # graph A is built
     second = _graph(copy.deepcopy(default_config.DEFAULT_CONFIG))
 
-    assert _vendors_seen_by_a_run(second) == ["sec_edgar,yfinance"]
+    # The second graph has no tool_vendors override, so it must see the shipped
+    # category default — not graph A's override, which is what this test guards.
+    expected = default_config.DEFAULT_CONFIG["data_vendors"]["fundamental_data"]
+    assert _vendors_seen_by_a_run(second) == [expected]
 
 
 @pytest.mark.unit
