@@ -204,9 +204,14 @@ def _fetch_tencent(code: str, start_date: str, end_date: str) -> pd.DataFrame:
 
 
 def _lower_prefixed(code: str) -> str:
-    """``600009`` -> ``sh600009`` (Sina and Tencent spell the market lowercase)."""
+    """``600009`` -> ``sh600009`` (Sina and Tencent spell the market lowercase).
+
+    Shanghai codes are not only the 6xxxxx shares: 5xxxxx are the Shanghai-listed
+    funds (588/589 ETFs included). Treating them as Shenzhen is what made Sina
+    answer "没有 sz589660" for a Shanghai ETF.
+    """
     return code.lower() if code[:2].isalpha() else (
-        f"sh{code}" if code.startswith("6")
+        f"sh{code}" if code.startswith(("6", "5"))
         else f"bj{code}" if code.startswith(("4", "8"))
         else f"sz{code}"
     )
@@ -217,6 +222,55 @@ _UPSTREAMS: tuple[Upstream, ...] = (
     Upstream("sina", _fetch_sina, parse_hist_sina),
     Upstream("tencent", _fetch_tencent, parse_hist_tx),
 )
+
+# ---- Listed funds ---------------------------------------------------------
+#
+# 588xxx/589xxx (Shanghai) and 159xxx (Shenzhen) are ETFs, not companies. The
+# stock endpoints above do not reliably serve them: Sina rejects the code, and
+# Eastmoney is the only stock-side host that answers, so a single throttle left
+# an ETF run with no prices at all. akshare's fund endpoints do serve them, and
+# fund_etf_hist_sina keeps working while Eastmoney is rate-limited — which is
+# exactly the fallback this chain needs.
+
+_FUND_PREFIXES = (
+    "15", "16", "18",  # Shenzhen funds / LOFs
+    "50", "51", "52", "53", "54", "55", "56", "57", "58", "59",  # Shanghai funds
+)
+
+
+def _is_fund(code: str) -> bool:
+    """Whether the bare code names a listed fund rather than an operating company."""
+    return str(code)[:2] in _FUND_PREFIXES
+
+
+def _fetch_etf_em(code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    import akshare as ak
+
+    return ak.fund_etf_hist_em(
+        symbol=code,
+        period="daily",
+        start_date=start_date.replace("-", ""),
+        end_date=end_date.replace("-", ""),
+        adjust="",
+    )
+
+
+def _fetch_etf_sina(code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    """Eastmoney-independent fallback: Sina serves fund history by exchange prefix."""
+    import akshare as ak
+
+    return ak.fund_etf_hist_sina(symbol=_lower_prefixed(code))
+
+
+_FUND_UPSTREAMS: tuple[Upstream, ...] = (
+    Upstream("etf-eastmoney", _fetch_etf_em, parse_hist),
+    Upstream("etf-sina", _fetch_etf_sina, parse_hist_sina),
+)
+
+
+def _chain_for(code: str) -> tuple[Upstream, ...]:
+    """Pick the endpoint family that can actually serve this instrument."""
+    return _FUND_UPSTREAMS if _is_fund(code) else _UPSTREAMS
 
 
 def reset_history_cache() -> None:
@@ -340,7 +394,7 @@ def load_history(
             return frame
 
     ensure_domestic_no_proxy()
-    frame = _walk_upstreams(code, symbol, start_date, end_date, _UPSTREAMS)
+    frame = _walk_upstreams(code, symbol, start_date, end_date, _chain_for(code))
     _write_cache(path, frame)
     _memory[symbol] = (datetime.now(), frame)
     return frame

@@ -12,6 +12,9 @@ from langgraph.prebuilt import InjectedState
 from tradingagents.dataflows.date_window import as_of, as_of_window
 from tradingagents.dataflows.errors import NoMarketDataError, VendorUnavailableError
 from tradingagents.dataflows.router import no_data_available, route_to_vendor, vendor_unavailable
+from tradingagents.dataflows.vendors.akshare import fund as akshare_fund
+from tradingagents.dataflows.vendors.akshare import market as akshare_market
+from tradingagents.dataflows.vendors.akshare import symbols as akshare_symbols
 from tradingagents.dataflows.vendors.yahoo.snapshot import build_verified_market_snapshot
 
 
@@ -289,3 +292,107 @@ def get_prediction_markets(
         str: A formatted markdown report of matching prediction markets
     """
     return route_to_vendor("get_prediction_markets", topic, limit, trade_date or None)
+
+
+# ---- ETF / LOF fund-level tools -------------------------------------------
+#
+# A listed fund has no company financial statements. Its fundamentals are the
+# published NAV, the premium/discount against that NAV, and what it holds.
+# These read fund.eastmoney.com, which keeps working while the quote host is
+# rate-limited, so an ETF run can still reason about valuation and composition.
+
+
+def _fund_code(symbol: str) -> str:
+    code = akshare_symbols.bare_code(symbol)
+    if not akshare_symbols.is_a_share(symbol) or not akshare_market._is_fund(code):
+        raise NoMarketDataError(symbol, symbol, "not an A-share listed fund")
+    return code
+
+
+def _window(trade_date: str, look_back_days: int) -> tuple[str, str]:
+    from datetime import date, timedelta
+
+    end = date.fromisoformat(trade_date) if trade_date else date.today()
+    start = end - timedelta(days=max(1, look_back_days))
+    return start.isoformat(), end.isoformat()
+
+
+@tool
+def get_etf_nav(
+    symbol: Annotated[str, InjectedState("company_of_interest")],
+    look_back_days: Annotated[int, "Trailing window length in days; default 90"] = 90,
+    trade_date: Annotated[str, InjectedState("trade_date")] = "",
+) -> str:
+    """
+    Retrieve the published unit NAV history of an ETF/LOF (daily). For a fund
+    this is the equivalent of financial statements: it shows whether the
+    market price is tracking NAV and how the fund's own value has moved.
+    Args:
+        look_back_days (int): Trailing window length in days, default 90
+    Returns:
+        str: NAV dates, unit and cumulative NAV, daily change, and purchase/redemption status.
+    """
+    try:
+        code = _fund_code(symbol)
+        start, end = _window(trade_date, look_back_days)
+        parsed = akshare_fund.parse_nav(akshare_fund.fetch_nav(code, start, end), symbol)
+        return akshare_fund.format_nav(parsed, symbol)
+    except VendorUnavailableError as exc:
+        return vendor_unavailable("get_etf_nav", exc)
+    except NoMarketDataError as exc:
+        return no_data_available(exc)
+
+
+@tool
+def get_etf_holdings(
+    symbol: Annotated[str, InjectedState("company_of_interest")],
+    trade_date: Annotated[str, InjectedState("trade_date")] = "",
+) -> str:
+    """
+    Retrieve an ETF/LOF's latest reported portfolio holdings and concentration.
+    Use it to judge what the fund actually owns and how concentrated that is,
+    rather than assuming the theme is diversified.
+    Returns:
+        str: The latest quarter's top holdings, with weights and top3/top10 concentration.
+    """
+    try:
+        code = _fund_code(symbol)
+        from datetime import date
+
+        year = (trade_date or "")[:4] or str(date.today().year)
+        parsed = akshare_fund.parse_holdings(
+            akshare_fund.fetch_holdings(code, year), symbol
+        )
+        return akshare_fund.format_holdings(parsed, symbol)
+    except VendorUnavailableError as exc:
+        return vendor_unavailable("get_etf_holdings", exc)
+    except NoMarketDataError as exc:
+        return no_data_available(exc)
+
+
+@tool
+def get_etf_premium(
+    symbol: Annotated[str, InjectedState("company_of_interest")],
+    look_back_days: Annotated[int, "Trailing window length in days; default 30"] = 30,
+    trade_date: Annotated[str, InjectedState("trade_date")] = "",
+) -> str:
+    """
+    Compute an ETF/LOF's premium or discount to its published unit NAV, using
+    the market close and the fund's NAV on the same date. A large premium means
+    the market price is paying above the fund's own assets; a discount is the
+    reverse. For a fund, this is a core valuation input that stock analysis lacks.
+    Args:
+        look_back_days (int): Trailing window length in days, default 30
+    Returns:
+        str: Latest premium, the window's range and mean, and a short daily table.
+    """
+    try:
+        code = _fund_code(symbol)
+        start, end = _window(trade_date, look_back_days)
+        prices = akshare_market.fetch_history(symbol, start, end)
+        nav = akshare_fund.parse_nav(akshare_fund.fetch_nav(code, start, end), symbol)
+        return akshare_fund.build_premium_report(prices, nav, symbol, look_back_days)
+    except VendorUnavailableError as exc:
+        return vendor_unavailable("get_etf_premium", exc)
+    except NoMarketDataError as exc:
+        return no_data_available(exc)

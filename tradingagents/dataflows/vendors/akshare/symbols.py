@@ -50,7 +50,7 @@ def bare_code(raw: str) -> str:
 
 
 def _infer_market(code: str) -> str:
-    if code.startswith("6"):
+    if code.startswith(("6", "5")):
         return "SH"
     if code.startswith(("4", "8")):
         return "BJ"
