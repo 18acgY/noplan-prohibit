@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from tradingagents.dataflows.symbols import normalize_symbol
-from tradingagents.dataflows.vendors.yahoo.market import get_closes
+from tradingagents.dataflows.closes import get_closes
 
 logger = logging.getLogger(__name__)
 

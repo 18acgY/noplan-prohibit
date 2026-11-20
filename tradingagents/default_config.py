@@ -202,8 +202,8 @@ def build_default_config() -> dict:
             ".MI":  "FTSEMIB.MI",  # Milan (FTSE MIB)
             ".TO":  "^GSPTSE",     # Toronto (TSX Composite)
             ".AX":  "^AXJO",       # Australia (ASX 200)
-            ".SS":  "000001.SS",   # Shanghai (SSE Composite)
-            ".SZ":  "399001.SZ",   # Shenzhen (SZSE Component)
+            ".SS":  "510300.SS",   # A-share benchmark: CSI 300 ETF
+            ".SZ":  "510300.SS",   # A-share benchmark: CSI 300 ETF
             ".SA":  "^BVSP",       # B3 Brazil (Ibovespa)
             "":     "SPY",         # default for US-listed tickers (no suffix)
         },
