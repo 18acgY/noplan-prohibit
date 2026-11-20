@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -16,6 +17,60 @@ from .validators import validate_model
 
 logger = logging.getLogger(__name__)
 
+
+
+# Streaming retry knobs. The deployment's gateway resets long streams now and
+# then ("upstream closed early: Connection reset by peer"), which used to fail a
+# whole analysis. Off by default so upstream behaviour is unchanged; set
+# TRADINGAGENTS_STREAM_RETRIES in .env to enable.
+_STREAM_RETRIES_ENV = "TRADINGAGENTS_STREAM_RETRIES"
+_STREAM_BACKOFF_ENV = "TRADINGAGENTS_STREAM_RETRY_BACKOFF_S"
+
+
+def _stream_attempts() -> int:
+    """How many times a dropped stream may be attempted (0 disables retrying)."""
+    raw = os.environ.get(_STREAM_RETRIES_ENV)
+    if raw is None or raw == "":
+        return 0
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("%s=%r is not an integer; streaming retry disabled.", _STREAM_RETRIES_ENV, raw)
+        return 0
+
+
+def _retry_backoff_seconds() -> float:
+    raw = os.environ.get(_STREAM_BACKOFF_ENV)
+    try:
+        return max(0.0, float(raw)) if raw else 2.0
+    except ValueError:
+        return 2.0
+
+
+def _is_transient_stream_error(exc: BaseException) -> bool:
+    """Transport-level failures worth re-sending the request for.
+
+    Only connection/timeout families qualify: a rejected payload or a bad key
+    would fail identically on retry, so those must surface immediately.
+    """
+    import httpx
+    import openai
+
+    transient = (
+        openai.APIConnectionError,
+        openai.APITimeoutError,
+        openai.InternalServerError,
+        ConnectionError,
+        TimeoutError,
+    )
+    if isinstance(exc, transient):
+        return True
+    if isinstance(exc, httpx.TransportError):
+        return True
+    if isinstance(exc, openai.APIError) and not isinstance(exc, openai.APIStatusError):
+        text = str(exc).lower()
+        return "connection" in text or "reset" in text or "closed early" in text
+    return False
 
 class NormalizedChatOpenAI(ChatOpenAI):
     """ChatOpenAI with normalized content output and capability-aware binding.
@@ -53,6 +108,39 @@ class NormalizedChatOpenAI(ChatOpenAI):
         if method == "function_calling" and not caps.supports_tool_choice:
             kwargs.setdefault("tool_choice", None)
         return super().with_structured_output(schema, method=method, **kwargs)
+
+
+
+    def _stream(self, *args, **kwargs):
+        """Yield the stream, retrying transient transport failures.
+
+        Each attempt buffers before yielding: a failure halfway through would
+        otherwise duplicate the text already handed to the caller, and the
+        caller cannot take half an answer back. Retrying therefore replays the
+        whole response, which costs tokens only when a stream actually breaks.
+        """
+        attempts = _stream_attempts()
+        if attempts <= 1:
+            yield from super()._stream(*args, **kwargs)
+            return
+
+        backoff = _retry_backoff_seconds()
+        for attempt in range(1, attempts + 1):
+            buffered: list[Any] = []
+            try:
+                for chunk in super()._stream(*args, **kwargs):
+                    buffered.append(chunk)
+            except BaseException as exc:
+                if attempt >= attempts or not _is_transient_stream_error(exc):
+                    raise
+                logger.warning(
+                    "Stream dropped (%s: %s); retrying %d/%d in %.1fs.",
+                    type(exc).__name__, exc, attempt, attempts - 1, backoff * attempt,
+                )
+                time.sleep(backoff * attempt)
+                continue
+            yield from buffered
+            return
 
 
 class LocalCompatibleChatOpenAI(NormalizedChatOpenAI):
