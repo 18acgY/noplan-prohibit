@@ -644,15 +644,15 @@ class TestDeferredReflection:
         assert settlement.resolve_benchmark("NVDA", config) == "^GSPC"
 
     def test_resolve_benchmark_china_a_shares(self):
-        """A-share tickers route to their exchange composite (uses the real
+        """A-share tickers route to the CSI 300 ETF benchmark (uses the real
         default benchmark_map, since A-share support relies on it)."""
         from tradingagents.default_config import DEFAULT_CONFIG
         config = {"benchmark_ticker": None,
                              "benchmark_map": DEFAULT_CONFIG["benchmark_map"]}
-        assert settlement.resolve_benchmark("600519.SS", config) == "000001.SS"
-        assert settlement.resolve_benchmark("000001.SZ", config) == "399001.SZ"
+        assert settlement.resolve_benchmark("600519.SS", config) == "510300.SS"
+        assert settlement.resolve_benchmark("000001.SZ", config) == "510300.SS"
         # .SH is the exchange's own suffix; Yahoo spells Shanghai .SS (#1260)
-        assert settlement.resolve_benchmark("600519.SH", config) == "000001.SS"
+        assert settlement.resolve_benchmark("600519.SH", config) == "510300.SS"
 
     def test_resolve_benchmark_brazil(self):
         """B3 tickers were measured against SPY."""
