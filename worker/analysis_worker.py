@@ -39,11 +39,19 @@ CANCEL_POLL_SEC = float(os.environ.get("TA_CANCEL_POLL_SEC", "5"))
 REPORTS_SUBDIR = "reports"
 _STOP = threading.Event()
 
+def _field_re(name: str) -> re.Pattern[str]:
+    """字段行：允许行首缩进、列表符号（- * + • 或 1. 1)），允许全角冒号。"""
+    return re.compile(
+        rf"^[ \t]*(?:[-*+•][ \t]+|\d{{1,2}}[.)][ \t]+)?\*\*{name}\*\*[ \t]*[:：][ \t]*(.+?)[ \t]*$",
+        re.MULTILINE,
+    )
+
+
 _FIELD_RE = {
-    "rating": re.compile(r"^\*\*Rating\*\*:\s*(.+?)\s*$", re.MULTILINE),
-    "summary": re.compile(r"^\*\*Executive Summary\*\*:\s*(.+?)\s*$", re.MULTILINE),
-    "target_price": re.compile(r"^\*\*Price Target\*\*:\s*(.+?)\s*$", re.MULTILINE),
-    "horizon": re.compile(r"^\*\*Time Horizon\*\*:\s*(.+?)\s*$", re.MULTILINE),
+    "rating": _field_re("Rating"),
+    "summary": _field_re("Executive Summary"),
+    "target_price": _field_re("Price Target"),
+    "horizon": _field_re("Time Horizon"),
 }
 _EMPTY_VALUES = {"", "not provided", "none", "n/a", "—", "-"}
 
