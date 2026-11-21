@@ -29,6 +29,10 @@ jobs:
     env:
       TAG: ${{ inputs.tag || github.event.release.tag_name }}
       GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        # 引擎在本仓库的 engine/ 子目录里，构建与校验都在那里跑。
+        working-directory: engine
     steps:
       - uses: actions/checkout@v7
         with:

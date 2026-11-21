@@ -217,4 +217,13 @@ NOPLAN_PASSWORD=你的密码 NOPLAN_SECRET=随便一串随机字符 NOPLAN_DB=./
 
 ## 许可证
 
-Apache License 2.0，见 [LICENSE](LICENSE)。
+GNU Affero General Public License v3.0，全文见 [LICENSE](LICENSE)。
+
+- 应用侧代码（根目录、`app/`、`worker/`、`deploy/`、`scripts/`、`docs/`）为本项目原创，按 AGPL-3.0 发布；
+- `engine/` 是 [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
+  的衍生版本，上游为 Apache License 2.0，原文保留在 [engine/LICENSE](engine/LICENSE)；
+  Apache-2.0 与 AGPL-3.0 兼容，本项目在此之上修改并以 AGPL-3.0 整体分发；
+- 改动清单与归属说明见 [NOTICE](NOTICE)。
+
+简单说：AGPL 允许你自由使用、修改、自建部署；但如果你把改造后的版本作为**网络服务**提供给别人用，
+必须把这一份源码（含你的修改）以同样协议公开。

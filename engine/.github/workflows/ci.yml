@@ -3,11 +3,25 @@ name: CI
 on:
   push:
     branches: [main, 'v[0-9]+.[0-9]+.[0-9]+']
+    # 只在本仓库的引擎部分变化时跑：应用侧改动不该拉起 4×2 的测试矩阵。
+    paths:
+      - 'engine/**'
+      - 'scripts/setup-engine.sh'
+      - '.github/workflows/ci.yml'
   pull_request:
+    paths:
+      - 'engine/**'
+      - 'scripts/setup-engine.sh'
+      - '.github/workflows/ci.yml'
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    # 引擎是子目录工程：pip install -e / pytest / ruff 都要在 engine/ 里跑。
+    working-directory: engine
 
 jobs:
   test:

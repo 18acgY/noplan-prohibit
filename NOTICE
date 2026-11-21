@@ -1,0 +1,39 @@
+noplan-prohibit
+Copyright (C) 2026 18acgY
+
+本仓库整体以 GNU Affero General Public License v3.0 发布，全文见 LICENSE
+（官方原文，661 行，sha256 0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0）。
+
+一、协议分层
+------------
+
+- 根目录及 app/、worker/、deploy/、scripts/、docs/：本项目原创代码，AGPL-3.0。
+- engine/：源自 TauricResearch/TradingAgents，上游协议为 Apache License 2.0，
+  原文保留在 engine/LICENSE，未做任何修改。Apache-2.0 与 AGPL-3.0 兼容，
+  因此 engine/ 并入本仓库后随本仓库整体以 AGPL-3.0 分发（保留上游版权与协议原文）。
+
+二、上游归属
+------------
+
+engine/ 来自 https://github.com/TauricResearch/TradingAgents（上游版本 v0.7.1）。
+上游作者与贡献者对其代码享有著作权；本项目仅在其上做修改，不改变其原始归属。
+
+三、本项目对 engine/ 的改动（Apache-2.0 §4(b) 要求的改动声明）
+---------------------------------------------------------------
+
+1. 数据链：新增 akshare A 股/ETF vendor（tradingagents/dataflows/vendors/akshare/），
+   含 ETF 基金层工具（净值、持仓、折溢价）与 A 股代码推断；
+2. 结算取价：新增 tradingagents/dataflows/closes.py（A 股走 akshare、其余走雅虎、
+   A 股指数显式报错），settlement 改为用它取价；
+3. 记忆：结算窗口、基准价与 A 股基准改为 510300.SS（沪深 300 ETF），相应调整测试期望；
+4. LLM 客户端：新增流式断线重试（openai_client.py，环境变量 TRADINGAGENTS_STREAM_RETRIES 控制，
+   默认关闭）；
+5. 文档：README 改写为中文分支文档；新增本 NOTICE。
+6. 结构：以 engine/ 子目录并入 noplan-prohibit 仓库，CI 增加路径过滤与工作目录。
+
+完整逐次改动见 git 历史（engine/ 路径下的提交）与 engine/CHANGELOG.md。
+
+四、无担保
+
+本程序按「现状」提供，不提供任何明示或暗示的担保，包括但不限于适销性与特定用途适用性。
+详见 LICENSE 第 15–17 条。本项目为个人研究工具，不构成投资建议。
