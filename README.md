@@ -190,6 +190,9 @@ NOPLAN_PASSWORD=你的密码 NOPLAN_SECRET=随便一串随机字符 NOPLAN_DB=./
 
 打开 <http://127.0.0.1:8000>。本地没有 worker 时，点「运行分析」会提示服务离线。
 
+服务器部署（网站 + worker + 引擎一套）：见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
+引擎在 `engine/`，自带 Python 依赖，用 `./scripts/setup-engine.sh` 建环境，与网站的 venv 互不干扰。
+
 测试：
 
 ```bash

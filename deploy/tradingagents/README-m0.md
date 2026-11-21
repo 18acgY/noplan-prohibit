@@ -1,9 +1,13 @@
 # M0：把 TradingAgents 迁到 Linux 服务器并跑通一次
 
+> **已归档（2026-11-21）**：引擎已并入本仓库的 `engine/`，部署流程统一写在
+> [`docs/DEPLOY.md`](../../docs/DEPLOY.md)。本文只保留当时「多工程并存」的原始记录，
+> 里面的目录布局（`/home/workspace/tradingagents/TradingAgents`）已经过时。
+
 > 目标：在服务器上**不依赖 DSH** 跑通一次分析，拿到真实耗时和峰值内存，用来定超时。
 > 本目录的 `relay_launcher.py` 是跨平台版：路径走 `TA_REPO` / `TA_DATA`，`winreg` 只在 Windows 生效。
 
-## 目录约定（多工程并存）
+## 目录约定（当时的布局，已过时）
 
 ```
 /home/workspace/

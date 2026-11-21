@@ -4,9 +4,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE="${TA_BASE:-$SCRIPT_DIR}"
-export TA_REPO="${TA_REPO:-$BASE/TradingAgents}"
-export TA_DATA="${TA_DATA:-$BASE/.runtime}"
+# 本脚本在 <仓库>/deploy/tradingagents/ 下，仓库根是上两级
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+BASE="${TA_BASE:-$REPO_ROOT}"
+export TA_REPO="${TA_REPO:-$BASE/engine}"
+export TA_DATA="${TA_DATA:-/home/workspace/tradingagents/.runtime}"
 export PYTHONUTF8=1
 export TZ=Asia/Shanghai
 
@@ -23,7 +25,7 @@ echo "TA_DATA=$TA_DATA"
 echo "log=$LOG"
 
 cd "$TA_REPO"
-/usr/bin/time -v "$TA_REPO/.venv/bin/python" "$BASE/relay_launcher.py" \
+/usr/bin/time -v "$TA_REPO/.venv/bin/python" "$SCRIPT_DIR/relay_launcher.py" \
   --ticker "$TICKER" --date "$DATE" \
   --analysts "$ANALYSTS" \
   --no-checkpoint --save --no-show --no-html 2>&1 | tee "$LOG"

@@ -6,7 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/home/workspace/tradingagents
+# 与下面的 ExecStart 一起对应你的检出目录（默认 /home/workspace/noplan-prohibit）
+WorkingDirectory=/home/workspace/noplan-prohibit
 EnvironmentFile=/etc/noplan-worker.env
 ExecStart=/usr/bin/python3 /home/workspace/noplan-prohibit/worker/analysis_worker.py
 Restart=always
