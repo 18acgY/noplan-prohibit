@@ -16,8 +16,8 @@ Why this exists (same four reasons as the Windows-only original):
 
 Paths come from the environment so the same file runs on Windows and Linux:
 
-    TA_REPO   default: ~/TradingAgents
-    TA_DATA   default: ~/.runtime
+    TA_REPO   default: <repo>/engine   (this file lives in <repo>/deploy/tradingagents/)
+    TA_DATA   default: <repo>/.runtime
 
 Usage:
 
@@ -43,8 +43,8 @@ def _env_path(name: str, default: pathlib.Path) -> pathlib.Path:
     return default.expanduser().resolve()
 
 
-REPO = _env_path("TA_REPO", pathlib.Path.home() / "TradingAgents")
-DATA = _env_path("TA_DATA", pathlib.Path.home() / ".runtime")
+REPO = _env_path("TA_REPO", pathlib.Path(__file__).resolve().parents[2] / "engine")
+DATA = _env_path("TA_DATA", pathlib.Path(__file__).resolve().parents[2] / ".runtime")
 
 
 def _apply_system_proxy() -> None:

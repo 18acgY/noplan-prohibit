@@ -26,9 +26,13 @@ from pathlib import Path
 
 API = os.environ.get("NOPLAN_API_BASE", "http://127.0.0.1:8080").rstrip("/")
 TOKEN = os.environ.get("NOPLAN_WORKER_TOKEN", "")
-TA_REPO = Path(os.environ.get("TA_REPO", str(Path.home() / "TradingAgents"))).expanduser()
-TA_DATA = Path(os.environ.get("TA_DATA", str(TA_REPO.parent / ".runtime"))).expanduser()
-TA_LAUNCHER = Path(os.environ.get("TA_LAUNCHER", str(TA_REPO.parent / "relay_launcher.py"))).expanduser()
+# 仓库根：worker/ 的上一级。默认值因此「克隆即用」，不必先配环境变量。
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+TA_REPO = Path(os.environ.get("TA_REPO", str(_REPO_ROOT / "engine"))).expanduser()
+TA_DATA = Path(os.environ.get("TA_DATA", str(_REPO_ROOT / ".runtime"))).expanduser()
+TA_LAUNCHER = Path(
+    os.environ.get("TA_LAUNCHER", str(_REPO_ROOT / "deploy" / "tradingagents" / "relay_launcher.py"))
+).expanduser()
 TA_PYTHON = os.environ.get("TA_PYTHON", str(TA_REPO / ".venv" / "bin" / "python"))
 TA_ANALYSTS = os.environ.get("TA_ANALYSTS", "market,news,fundamentals")
 TA_TIMEOUT_MIN = int(os.environ.get("TA_TIMEOUT_MIN", "20"))

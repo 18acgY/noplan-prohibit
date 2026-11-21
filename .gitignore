@@ -22,3 +22,11 @@ pytest-cache-files-*/
 *.7z
 *.zip
 *.tar.gz
+
+# 引擎（engine/）的运行时产物与本地环境：数据不进仓库
+engine/.venv/
+engine/.runtime/
+engine/ta-data/
+engine/.scratch/
+engine/.env
+engine/*.egg-info/
