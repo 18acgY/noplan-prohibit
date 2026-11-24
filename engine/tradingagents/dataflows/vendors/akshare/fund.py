@@ -51,9 +51,10 @@ def _require(frame: pd.DataFrame, columns: dict, symbol: str, source: str) -> pd
 
 
 def fetch_nav(code: str, start_date: str, end_date: str) -> pd.DataFrame:
-    import akshare as ak
+    from tradingagents.dataflows.vendors.akshare._compat import resolve
 
-    return ak.fund_etf_fund_info_em(
+    # akshare 1.20.41 renamed this interface and deleted the old name.
+    return resolve("fund_exchange_nav_hist_em", "fund_etf_fund_info_em")(
         fund=code,
         start_date=start_date.replace("-", ""),
         end_date=end_date.replace("-", ""),

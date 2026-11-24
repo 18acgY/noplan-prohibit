@@ -28,11 +28,11 @@ if [ ! -x "$venv/bin/python" ]; then
   "$python" -m venv "$venv"
 fi
 
-echo "== 安装依赖（引擎 + 生产额外需要的 akshare）=="
+echo "== 安装依赖（引擎，akshare 版本由 pyproject.toml 钉住）=="
 "$venv/bin/python" -m pip install -q --upgrade pip -i "$index"
 "$venv/bin/python" -m pip install -q -e "$engine" -i "$index"
-# pyproject.toml 没声明 akshare；缺了它会静默回退雅虎，A 股取价全失败。
-"$venv/bin/python" -m pip install -q akshare -i "$index"
+# akshare 已写进 engine/pyproject.toml 并锁定版本：它的接口在次版本里会改名，
+# 不锁就会在重装环境时把线上的 A 股/ETF 数据链打断（2026-11-21 就这样断过一次）。
 
 echo "== 验收 =="
 "$venv/bin/python" - <<'PY'

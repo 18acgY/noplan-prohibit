@@ -170,9 +170,10 @@ def parse_hist_tx(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
 
 
 def _fetch_eastmoney(code: str, start_date: str, end_date: str) -> pd.DataFrame:
-    import akshare as ak
+    from tradingagents.dataflows.vendors.akshare._compat import resolve
 
-    return ak.stock_zh_a_hist(
+    # akshare 1.20.46 renamed this interface and deleted the old name.
+    return resolve("stock_zh_a_hist_em", "stock_zh_a_hist")(
         symbol=code,
         period="daily",
         start_date=start_date.replace("-", ""),
@@ -182,9 +183,11 @@ def _fetch_eastmoney(code: str, start_date: str, end_date: str) -> pd.DataFrame:
 
 
 def _fetch_sina(code: str, start_date: str, end_date: str) -> pd.DataFrame:
-    import akshare as ak
+    from tradingagents.dataflows.vendors.akshare._compat import resolve
 
-    return ak.stock_zh_a_daily(
+    # akshare 1.20.46 renamed this interface and deleted the old name. The new
+    # one also takes ``period``; the old one rejects it, so neither call passes it.
+    return resolve("stock_zh_a_hist_sina", "stock_zh_a_daily")(
         symbol=_lower_prefixed(code),
         start_date=start_date.replace("-", ""),
         end_date=end_date.replace("-", ""),

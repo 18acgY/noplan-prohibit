@@ -9,6 +9,11 @@ description = "TradingAgents: Multi-Agents LLM Financial Trading Framework"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    # 钉死版本：akshare 在 1.20.41 / 1.20.46 改过一批函数名并删掉旧名
+    # （ETF 净值、A股东财/新浪历史），不锁版本会在重装环境时突然断掉。
+    # 升级步骤：改这里的版本 + 跑 tests/test_akshare_compat.py + 在服务器上冒烟
+    # （get_etf_nav / get_closes 各一次），再改 scripts/setup-engine.sh 里的提示。
+    "akshare==1.20.21",
     "cryptography>=42.0",
     "langchain-core>=1.6.5",
     "langchain-anthropic>=1.7.4",
