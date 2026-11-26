@@ -8,7 +8,7 @@
 <section class="analysis-card">
   <p class="hint">
     分析日 {{ analysis.analysis_date }}
-    {% if analysis.finished_at %}· 完成于 {{ analysis.finished_at }}{% endif %}
+    {% if analysis.finished_at %}· 完成于 {{ analysis.finished_at | local_dt }}（北京时间）{% endif %}
     {% if analysis.duration_s %}· 用时 {{ "%.0f"|format(analysis.duration_s) }} 秒{% endif %}
   </p>
 

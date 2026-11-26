@@ -6,7 +6,7 @@ import hmac
 import os
 import secrets
 from contextlib import closing
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +52,23 @@ def _pct(value: Any) -> str:
         return f"{float(value) * 100:.2f}%"
     except (TypeError, ValueError):
         return "—"
+
+
+def _local_dt(value: Any) -> str:
+    """库里的时间是 UTC ISO（+00:00），页面上换成北京时间显示。
+
+    直接贴原值会让人少看 8 小时，凌晨跑完的结果连日期都是前一天。
+    """
+    if not value:
+        return ""
+    text = str(value).strip()
+    try:
+        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return text
+    if moment.tzinfo is None:  # 老数据可能没带偏移，按 UTC 处理
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(analysis_mod.TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _parse_form(form: Any) -> dict[str, Any]:
@@ -110,6 +127,7 @@ def create_app() -> FastAPI:
     templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
     templates.env.filters["money"] = _money
     templates.env.filters["pct"] = _pct
+    templates.env.filters["local_dt"] = _local_dt
     templates.env.filters["markdown"] = render_markdown
     templates.env.globals["rating_info"] = ratings.info
     templates.env.globals["rating_legend"] = ratings.legend
